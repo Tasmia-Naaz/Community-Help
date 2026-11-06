@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Reported Conversations - Community Help Connect{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="bi bi-flag-fill text-danger me-2"></i>Reported Conversations</h2>
+            <p class="text-secondary mb-0">Restricted administrator audit view. Only reports and the linked conversation history are shown.</p>
+        </div>
+        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary">Admin Dashboard</a>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold">Reports</div>
+                <div class="list-group list-group-flush">
+                    {% for report in reports.items %}
+                    <a class="list-group-item list-group-item-action {% if selected_report and selected_report.id == report.id %}active{% endif %}"
+                       href="{{ url_for('admin.conversation_reports', page=reports.page, report=report.id) }}">
+                        <div class="d-flex justify-content-between gap-2">
+                            <strong>Report #{{ report.id }} · Conversation #{{ report.conversation_id }}</strong>
+                            <span class="small">{{ report.created_at.strftime('%d %b %Y, %H:%M') }}</span>
+                        </div>
+                        <div class="small mt-1">Reported by {{ report.reporter.full_name }}</div>
+                        <div class="small text-truncate">{{ report.reason }}</div>
+                    </a>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">There are no conversation reports.</div>
+                    {% endfor %}
+                </div>
+                {% if reports.pages > 1 %}
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                    {% if reports.has_prev %}
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.conversation_reports', page=reports.prev_num, report=selected_report.id if selected_report else None) }}">Previous</a>
+                    {% else %}<span></span>{% endif %}
+                    <span class="small text-muted">Page {{ reports.page }} of {{ reports.pages }}</span>
+                    {% if reports.has_next %}
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.conversation_reports', page=reports.next_num, report=selected_report.id if selected_report else None) }}">Next</a>
+                    {% else %}<span></span>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            {% if selected_report %}
+            {% set conversation = selected_report.conversation %}
+            {% set participant = conversation.help_seeker %}
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white">
+                    <strong>Report #{{ selected_report.id }}</strong>
+                    <div class="small text-secondary">
+                        {{ participant.full_name }} ({{ participant.role.replace('_', ' ') }}) ↔
+                        {{ conversation.donor.full_name }} (donor)
+                    </div>
+                    <div class="small text-secondary">
+                        {{ conversation.resource_listing.name or conversation.resource_listing.category if conversation.resource_listing else 'Resource listing unavailable' }}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="mb-1"><strong>Reported by:</strong> {{ selected_report.reporter.full_name }}</p>
+                    <p class="mb-3"><strong>Reason:</strong> {{ selected_report.reason }}</p>
+                    <h6 class="fw-bold">Recent message history</h6>
+                    <div class="border rounded p-3" style="max-height: 55vh; overflow-y: auto;">
+                        {% for message in recent_messages %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between gap-2">
+                                <strong>{{ message.sender.full_name }}</strong>
+                                <time class="small text-muted">{{ message.created_at.strftime('%d %b %Y, %H:%M') }}</time>
+                            </div>
+                            <div class="text-break">{{ message.message_text }}</div>
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">No messages have been sent in this conversation.</p>
+                        {% endfor %}
+                    </div>
+                    {% if recent_messages|length == 50 %}
+                    <p class="small text-muted mt-2 mb-0">Showing the latest 50 messages.</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="card shadow-sm border-0">
+                <div class="card-body text-center py-5 text-muted">Select a report to review its conversation context.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

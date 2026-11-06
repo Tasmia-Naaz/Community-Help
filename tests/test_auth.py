@@ -1,5 +1,19 @@
+from extensions import db
 from models import User
+from seed import seed_demo_data
 from tests.conftest import create_user
+
+
+def test_production_app_requires_environment_secret(monkeypatch):
+    from app import create_app
+
+    monkeypatch.delenv('SECRET_KEY', raising=False)
+    try:
+        create_app('production')
+    except RuntimeError as exc:
+        assert 'SECRET_KEY' in str(exc)
+    else:
+        raise AssertionError('Production must refuse to start without SECRET_KEY.')
 
 
 def test_registration_success(client, app):
@@ -99,3 +113,48 @@ def test_logout(client, app):
     response = client.get('/auth/logout', follow_redirects=True)
     assert response.status_code == 200
     assert b"logged out" in response.data
+
+
+def test_demo_seed_restores_passwords_for_existing_demo_accounts(client, app):
+    with app.app_context():
+        admin = create_user(
+            role='admin',
+            email='admin@communityhelp.org',
+            password='OldAdminPassword@123'
+        )
+        admin.is_suspended = True
+        seeker = create_user(
+            role='help_seeker',
+            email='seeker@example.com',
+            password='OldSeekerPassword@123'
+        )
+        volunteer = create_user(
+            role='volunteer',
+            email='volunteer@example.com',
+            password='OldVolunteerPassword@123'
+        )
+        db.session.get(User, volunteer.id).volunteer_verification.verification_status = 'pending'
+        donor = create_user(
+            role='donor',
+            email='donor@example.com',
+            password='OldDonorPassword@123'
+        )
+
+    seed_demo_data(app)
+
+    demo_accounts = [
+        ('admin@communityhelp.org', 'Admin@12345'),
+        ('seeker@example.com', 'Seeker@123'),
+        ('volunteer@example.com', 'Volunteer@123'),
+        ('donor@example.com', 'Donor@123')
+    ]
+    for email, password in demo_accounts:
+        response = client.post('/auth/login', data={'email': email, 'password': password})
+        assert response.status_code == 302
+        client.get('/auth/logout')
+
+    with app.app_context():
+        assert db.session.get(User, admin.id).is_suspended is False
+        assert db.session.get(User, seeker.id).check_password('Seeker@123')
+        assert db.session.get(User, volunteer.id).volunteer_verification.verification_status == 'approved'
+        assert db.session.get(User, donor.id).check_password('Donor@123')

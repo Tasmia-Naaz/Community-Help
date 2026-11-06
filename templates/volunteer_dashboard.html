@@ -202,6 +202,10 @@
                             {% endif %}
                         </div>
                         {% if current_user.role == 'volunteer' %}
+                        <form method="POST" action="{{ url_for('messaging.contact_donor', resource_id=resource.id) }}" class="mb-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-chat-dots me-1"></i>Message Donor</button>
+                        </form>
                         <form method="POST" action="{{ url_for('volunteers.request_resource', resource_id=resource.id) }}" class="d-flex align-items-end gap-2 mt-auto">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="flex-grow-1">
@@ -243,6 +247,10 @@
                             <td>{{ item_request.resource.locality }}</td>
                             <td><span class="badge {% if item_request.status == 'Approved' %}bg-success{% elif item_request.status == 'Rejected' %}bg-danger{% elif item_request.status == 'Pending' %}bg-warning text-dark{% else %}bg-primary{% endif %}">{{ item_request.status }}</span></td>
                             <td class="text-end pe-3">
+                                <form method="POST" action="{{ url_for('messaging.contact_resource_request_participant', resource_request_id=item_request.id) }}" class="mb-2">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">Message Donor</button>
+                                </form>
                                 {% if item_request.status == 'Pending' %}
                                 <span class="small text-muted">Awaiting donor approval</span>
                                 {% elif item_request.status == 'Approved' or item_request.status == 'Collected' %}

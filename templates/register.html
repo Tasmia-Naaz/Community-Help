@@ -12,7 +12,7 @@
                     <p class="small text-white-50 mb-0">Join your neighborhood support network today</p>
                 </div>
                 <div class="card-body p-4 p-md-5">
-                    <form method="POST" action="{{ url_for('auth.register') }}" novalidate>
+                    <form method="POST" enctype="multipart/form-data" action="{{ url_for('auth.register') }}" novalidate data-loading-form data-loading-text="Uploading documents securely...">
                         {{ form.hidden_tag() }}
 
                         <!-- Full Name -->
@@ -64,6 +64,33 @@
                             {% endfor %}
                         </div>
 
+                        <div id="volunteer-verification-fields" class="border rounded-3 bg-light p-3 mb-4 d-none">
+                            <h5 class="fw-bold"><i class="bi bi-shield-lock me-1"></i>Volunteer Verification</h5>
+                            <p class="small text-secondary">Your ID document is stored privately and is visible only to authorized administrators.</p>
+                            <div class="mb-3">
+                                {{ form.id_document_type.label(class="form-label fw-semibold") }}
+                                {{ form.id_document_type(class="form-select", id="id_document_type") }}
+                                {% for error in form.id_document_type.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="mb-3">
+                                {{ form.id_document.label(class="form-label fw-semibold") }}
+                                {{ form.id_document(class="form-control", accept=".pdf,.jpg,.jpeg,.png", id="id_document") }}
+                                <div class="form-text">Required. PDF, JPG, JPEG, or PNG; maximum 5 MB.</div>
+                                {% for error in form.id_document.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="mb-3">
+                                {{ form.volunteer_certificate.label(class="form-label fw-semibold") }}
+                                {{ form.volunteer_certificate(class="form-control", accept=".pdf,.jpg,.jpeg,.png") }}
+                                <div class="form-text">Optional. PDF, JPG, JPEG, or PNG; maximum 5 MB.</div>
+                                {% for error in form.volunteer_certificate.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="mb-2">
+                                {{ form.volunteering_experience.label(class="form-label fw-semibold") }}
+                                {{ form.volunteering_experience(class="form-control", rows="3", maxlength="2000", placeholder="Describe relevant experience (optional)") }}
+                                {% for error in form.volunteering_experience.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
                         <!-- Password -->
                         <div class="row g-2 mb-4">
                             <div class="col-md-6">
@@ -103,4 +130,18 @@
         </div>
     </div>
 </div>
+<script>
+    const roleSelect = document.getElementById('role');
+    const verificationFields = document.getElementById('volunteer-verification-fields');
+    const idType = document.getElementById('id_document_type');
+    const idFile = document.getElementById('id_document');
+    function updateVolunteerFields() {
+        const isVolunteer = roleSelect.value === 'volunteer';
+        verificationFields.classList.toggle('d-none', !isVolunteer);
+        idType.required = isVolunteer;
+        idFile.required = isVolunteer;
+    }
+    roleSelect.addEventListener('change', updateVolunteerFields);
+    updateVolunteerFields();
+</script>
 {% endblock %}

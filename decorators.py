@@ -48,6 +48,11 @@ def role_required(*allowed_roles):
                 elif user.role == 'admin':
                     return redirect(url_for('admin.dashboard'))
                 return redirect(url_for('index'))
+            if user.role == 'volunteer':
+                verification = user.volunteer_verification
+                if not verification or verification.verification_status != 'approved':
+                    flash("Volunteer features are available after administrator approval.", "info")
+                    return redirect(url_for('auth.volunteer_verification_status'))
             return f(*args, **kwargs)
         return decorated_function
     return decorator

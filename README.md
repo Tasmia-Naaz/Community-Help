@@ -1,8 +1,7 @@
-<<<<<<< HEAD
 # Community Help Connect
 
 > **A Centralized Hyperlocal Peer-to-Peer Community Support & Emergency Coordination Web Application**  
-> *Developed with Python Flask, MySQL, Flask-SQLAlchemy, and Bootstrap 5 for academic evaluation & viva demonstration.*
+> *Developed with Python Flask, MySQL, Flask-SQLAlchemy, and Bootstrap 5 for academic evaluation  demonstration.*
 
 ---
 
@@ -92,68 +91,127 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 
 ### Step 3: Install Required Dependencies
 ```powershell
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
-### Step 4: Setup MySQL Database
-1. Ensure your MySQL Server is running (via MySQL Windows Service, MySQL Workbench, or XAMPP Control Panel).
-2. Open MySQL CLI or PowerShell:
+### Step 4: Create a Supabase project and get its database URL
+
+1. Sign in at [supabase.com/dashboard](https://supabase.com/dashboard) and create a project. Choose a region near your users and set a strong **Database Password**. Save that password securely; it is separate from your Supabase account password.
+2. Open the project and choose **Connect** (or **Project Settings → Database → Connection string**).
+3. Select the **URI** format and copy the connection string. Use the **Session pooler** connection if a direct connection is unavailable from your network (for example, IPv4-only networks). Use the exact host, port, username, and database name Supabase displays; they vary per project.
+   - Direct connection URLs typically resemble `postgresql://postgres:<DB_PASSWORD>@db.<PROJECT_REF>.supabase.co:5432/postgres?sslmode=require`.
+   - Session pooler URLs typically resemble `postgresql://postgres.<PROJECT_REF>:<DB_PASSWORD>@<POOLER_HOST>:5432/postgres?sslmode=require`.
+   - These are examples only. Prefer the URI copied from the dashboard rather than constructing one yourself.
+4. If your database password contains reserved URL characters (such as `@`, `:`, `/`, `#`, or `%`), URL-encode the password portion before placing it in the URI. You can encode it locally without sending it to a website:
+
 ```powershell
-mysql -u root -p
+python -c "from getpass import getpass; from urllib.parse import quote; print(quote(getpass('Database password: '), safe=''))"
 ```
-3. Enter your MySQL password and run the SQL commands:
-```sql
-CREATE DATABASE IF NOT EXISTS community_help_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-EXIT;
-```
-*(Alternatively, you can import `schema.sql` directly: `mysql -u root -p community_help_db < schema.sql`)*
 
-### Step 5: Configure Environment Variables (`.env`)
-1. In the project folder, copy `.env.example` to create `.env`:
+Replace only `<DB_PASSWORD>` in the copied URI with the encoded value. Keep `?sslmode=require` if it is included in the dashboard URI.
+
+### Step 5: Configure `.env` for Supabase
+
+Copy the example configuration if you have not done so already:
+
 ```powershell
 Copy-Item .env.example .env
 ```
-2. Open `.env` in VS Code and adjust your database password if necessary:
-```ini
-DB_USER=root
-DB_PASSWORD=your_actual_mysql_password
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_NAME=community_help_db
-SECRET_KEY=college-viva-secret-key-community-help-2026
-USE_SQLITE_FALLBACK=0
-```
-> **Note for quick local viva testing:** If MySQL is not running on your machine, you can change `USE_SQLITE_FALLBACK=1` in `.env` to run with an instant local SQLite database in `instance/community_help.db`!
 
-### Step 6: Initialize Database and Populate Demo Data
-Run the seed script in your activated virtual environment:
+In the project-root `.env` file, set these values. `DATABASE_URL` is the PostgreSQL URI from Step 4. In Supabase, find the project API URL and the server-side `service_role` key under **Project Settings → API** (the exact API Keys page label can vary). Use the `service_role` key, not the publishable/anon key, for private server-side document storage.
+
+```ini
+SECRET_KEY=replace-with-a-long-random-secret
+DATABASE_URL=postgresql://postgres:ENCODED_PASSWORD@HOST:PORT/postgres?sslmode=require
+USE_SQLITE_FALLBACK=0
+
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVER_ONLY_SERVICE_ROLE_KEY
+SUPABASE_STORAGE_BUCKET=volunteer-verification-documents
+```
+
+Generate a `SECRET_KEY` locally with:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Do not add quotes around values unless required by your `.env` parser, do not commit `.env`, and never paste the `service_role` key into frontend code, chat, source control, or a public issue. It grants privileged access to your Supabase project. A placeholder `SECRET_KEY` is not suitable for production; keep your generated value outside source control.
+
+The app uses SQLAlchemy with Supabase PostgreSQL for application data and the Supabase Storage API for private volunteer documents. No Supabase JavaScript client is required in the browser.
+
+### Step 6: Initialize the database and private Storage bucket
+
+When you first create a Supabase project, it has a PostgreSQL database but **does not yet have this application's tables**. That is expected. The app tables are created by the initialization command below; they do not appear just because the Supabase project/database exists.
+
+For a **new/empty Supabase project**, first create the application's tables and initial admin account from the activated virtual environment:
+
+```powershell
+python seed.py --admin-only
+```
+
+This command uses the configured `DATABASE_URL`, creates any missing ORM tables, and creates `admin@communityhelp.org` with the development password shown in `seed.py`. This fixed seed credential is for local setup only: never expose it on a public deployment. Provision a separately secured administrator account before going live.
+
+Then run the complete [`supabase_migration.sql`](./supabase_migration.sql) script in **Supabase Dashboard → SQL Editor → New query**. Paste the file's contents, review the target project, and select **Run**. This creates/initializes the feature tables, sends existing volunteers to pending review, creates the private `volunteer-verification-documents` bucket, and installs its Storage policies. It does not erase existing application records.
+
+After both steps, open **Table Editor** in the same Supabase project. You should see application tables such as `users`, `help_requests`, `resource_listings`, `notifications`, `volunteer_verifications`, `conversations`, and `messages`. The Supabase internal `auth` and `storage` schemas are separate; the app's tables are in the `public` schema.
+
+If Table Editor still shows no `public` application tables:
+
+1. Confirm the terminal is open in the repository folder containing `.env`, and that `.env` has the connection URI for this exact Supabase project.
+2. Verify the app can connect to the configured database. This prints only the connected database/schema (not the password or full URI):
+
+```powershell
+python -c "from app import create_app; from sqlalchemy import text; from extensions import db; app=create_app(); ctx=app.app_context(); ctx.push(); print(db.session.execute(text('select current_database(), current_schema()')).one()); ctx.pop()"
+```
+
+3. If the connection succeeds, run `python seed.py --admin-only` again and check its output for errors. Then refresh Table Editor and make sure its schema selector is set to `public`.
+4. If that works, run `supabase_migration.sql` in the SQL Editor for verification and Storage setup. Do not run `schema.sql` on Supabase: it is a MySQL script and drops tables.
+
+For an **existing Supabase app database**, back it up first, then run `supabase_migration.sql` in the SQL Editor. Its `IF NOT EXISTS`/conflict-safe statements are intended to preserve existing tables and records. Do not run `schema.sql` on Supabase: it is a MySQL schema script that drops existing tables.
+
+The bucket must remain **private**. Flask checks the signed-in application user's role before using the server-side Storage service key; admins receive short-lived (60-second) signed preview links. Keep the key server-only. The SQL policies also document the folder-based rules for direct Supabase Auth access; that separate access path requires trusted `app_metadata` claims and must not use user-editable metadata.
+
+### Step 7: (Optional) Add demo accounts and sample data
+
+For local evaluation only, run:
+
 ```powershell
 python seed.py --demo
 ```
-This command automatically:
-- Creates any missing MySQL tables, including `resource_requests`, without replacing existing tables or listings.
-- Creates the master administrator account (`admin@communityhelp.org`).
-- Seeds realistic test accounts, sample help requests, and resource listings.
 
-For an existing installation, add the volunteer item-request table and optional resource name column without reseeding or changing existing listings:
+This adds demo Help Seeker, Volunteer, and Donor accounts and sample listings/requests without deleting existing rows. If a demo account already exists, this explicit demo command restores its published password and role access; use it only on a development/demo database. It includes a pre-approved demo volunteer with no identity document, so use it only for demonstration. Real public volunteer registrations must upload an ID and wait for admin approval. Do not seed demo credentials into a production database.
+
+If upgrading a non-Supabase existing MySQL/SQLite installation, the legacy resource-request migration is still available:
+
 ```powershell
 python migrate_resource_requests.py
 ```
 
-### Step 7: Run the Web Application
+### Step 8: Run the Web Application
+
+From the activated virtual environment and repository root:
+
 ```powershell
 python app.py
 ```
-Open your web browser and navigate to:
-```
-http://127.0.0.1:5000
-```
+
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000). Register a Help Seeker or Donor to exercise messaging. Register a Volunteer with an ID document, then log in as an admin to review the application.
+
+### Use MySQL or SQLite instead (optional)
+
+Supabase is the recommended setup for the private document-storage feature. The app also supports its existing MySQL database or a local SQLite fallback:
+
+- **MySQL:** Create `community_help_db` with MySQL 8+, set `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, and `DB_NAME` in `.env`, and leave `DATABASE_URL` blank. On an existing installation, back up your database and run `python migrate_community_features.py` to add the new app tables.
+- **SQLite:** Set `USE_SQLITE_FALLBACK=1` and leave `DATABASE_URL` blank. Then run `python seed.py --admin-only` to initialize the database. SQLite is useful for local work, but volunteer document uploads still require a configured Supabase Storage project.
+
+For MySQL/SQLite document uploads, configure the same three `SUPABASE_*` Storage values above. If they are missing, volunteer registration will return a clear storage configuration error rather than saving sensitive documents locally or publicly.
 
 ---
 
-## 6. Step-by-Step Manual Testing & Viva Demonstration Guide
+## 6. Step-by-Step Manual Testing &  Demonstration Guide
 
-Follow this sequence to demonstrate all 8 pages and all workflows during your viva:
+Follow this sequence to demonstrate all 8 pages and all workflows during your :
 
 ### Test 1: Public Registration & Login Throttling (Workflows A & H)
 1. Go to `http://127.0.0.1:5000/auth/register`.
@@ -208,7 +266,57 @@ Follow this sequence to demonstrate all 8 pages and all workflows during your vi
 
 ---
 
-## 7. Running Automated Tests
+## 7. Volunteer Verification and Direct Messaging
+
+### Volunteer application and approval
+
+Public volunteer registration requires an ID document type and an ID document upload. PDF, JPG/JPEG, and PNG files are accepted, with a 5 MB per-file limit; the server checks the extension, size, and file signature. A certificate and experience are optional. Documents are uploaded from Flask to the private Supabase Storage bucket and only paths/metadata are stored in the application database. A new application starts as `pending`; volunteer-only routes (including task acceptance and resource requests) require an `approved` verification and a non-suspended account. Applicants can see their status and, after rejection or an administrator's information request, resubmit documents. Approval, rejection, requests for information, and suspension are audited and notify the volunteer.
+
+Administrators use **Volunteer Verification** in the Admin Dashboard to inspect application details and history, create a 60-second signed document preview, and approve, reject (reason required), request additional information (message required), or suspend an approved volunteer (reason required). Suspended volunteers cannot use volunteer routes. Existing volunteers created before this migration are added as pending and must be reviewed; an administrator can request information to enable their document resubmission.
+
+Demo-only accounts created by `python seed.py --demo` include a pre-approved volunteer so existing smoke tests can exercise task workflows. This demo account has no ID document on file and is not an example of production onboarding; real public volunteer registrations always require an ID upload.
+
+### Supabase setup and migrations
+
+The app supports Supabase PostgreSQL through SQLAlchemy as well as the existing MySQL/SQLite configurations. In `.env`, set `DATABASE_URL` to the PostgreSQL connection URI from Supabase (include `?sslmode=require` for a direct connection), and install dependencies with `pip install -r requirements.txt`. Supabase pooler URIs should use the host and port provided by the project. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET=volunteer-verification-documents`. Keep the service-role key server-side only; never commit it, expose it to browsers, or put it in user-editable metadata. Registration and resubmission fail explicitly if private storage is not configured.
+
+For Supabase PostgreSQL, run the complete, repeatable database-and-storage migration in [`supabase_migration.sql`](./supabase_migration.sql) using the Supabase SQL Editor or `psql`. It creates only the new feature tables and indexes, preserves existing records, creates the **private** document bucket, and installs storage object policies. It also initializes pre-existing volunteers as pending. Do not mark old volunteers approved without verifying them.
+
+For the existing Flask SQLAlchemy database (MySQL, PostgreSQL, or SQLite), configure `DATABASE_URL` as appropriate and run:
+
+```powershell
+python migrate_community_features.py
+```
+
+The script creates only the new feature tables and preserves existing application tables/data. Supabase's storage bucket and policies are provisioned by `supabase_migration.sql`; the migration SQL is also the exact schema/policy reference for those features.
+
+The bucket must remain private. The SQL migration restricts direct authenticated object operations to a volunteer's own `volunteer/<community_user_id>/...` folder and allows admins to read. For direct Supabase Auth access, populate trusted `app_metadata` claims (`role` and `community_user_id`) from a trusted server; never accept those claims from `user_metadata`. The current Flask app uses its authenticated session and the service-role Storage API server-side, with route-level volunteer/admin checks and 60-second signed preview links. The service key bypasses Storage RLS, so do not add an unauthenticated upload endpoint or expose the key.
+
+### Help Seeker–Donor and Volunteer–Donor conversations
+
+Help Seekers and approved, active Volunteers can browse available donor resources and choose **Contact Donor**. Volunteers can also start a conversation from their resource dashboard without submitting an item request. Each thread is private to the donor and its one seeker/volunteer participant, is linked to the resource listing, and does not reserve stock or expose private phone numbers, email addresses, or pickup instructions. Donors can message multiple volunteers through their separate resource-request conversations. Both participants can review history, see unread counts, exchange text messages, receive notifications, and report suspicious conversations. The chat initially loads the latest 50 messages, can fetch older history on demand, sends without reloading the page, and polls for new messages every five seconds while open. Donors can close and reopen conversations; closed conversations reject new messages unless reopened. Only administrators can review reported conversation history in **Review Conversation Reports**.
+
+### Feature verification
+
+Run the automated feature and regression tests:
+
+```powershell
+.\venv\Scripts\python.exe -m pytest -q
+```
+
+For a fresh development environment, install test dependencies with `pip install -r requirements-dev.txt`.
+
+The focused tests cover mandatory document uploads and pending status, pending/suspended route denial, admin approval and audit history, secure preview authorization, private message exchange/read receipts, and unrelated-user/volunteer conversation denial. Supabase Storage itself requires a configured project for an end-to-end live upload/preview test; unit tests mock that external service.
+
+### Preparing the repository for deployment
+
+The root `.gitignore` excludes local secrets (`.env` and `.flaskenv`), virtual environments, SQLite/instance data, caches, logs, and build artifacts. Keep application source, templates, static assets, migrations, and tests in Git; they are not deployment clutter. Existing local files are not deleted by these ignore rules.
+
+Before deploying, review `git status --short` and ensure `.env`, database files, and credentials are not staged. Configure `SECRET_KEY`, `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` as environment variables in the hosting provider. Apply `supabase_migration.sql` to the intended Supabase project. Do not run `seed.py --demo` or deploy with demo credentials. Use the production configuration (`FLASK_ENV=production`) and your host's supported WSGI server and start command; the exact command depends on the hosting provider.
+
+This repository includes a `Procfile` and `wsgi.py` for Procfile-compatible platforms. Install production dependencies from `requirements.txt`; the host starts the app with Gunicorn. The WSGI entry point explicitly loads the production configuration and requires `SECRET_KEY`. Set the database and Supabase Storage variables in the host's secret/environment settings, and use the provided platform's PostgreSQL connection URI. Do not put production secrets in the repository or run demo seed commands against production.
+
+## 8. Running Automated Tests
 
 A comprehensive automated test suite is provided in the `tests/` directory covering authentication, duplicate acceptance prevention, lifecycle transitions, resource expiry, and emergency dispatch.
 
@@ -218,11 +326,11 @@ To run the automated tests:
 pytest -v
 ```
 
-All test cases run against an isolated in-memory test database without modifying your MySQL development records.
+All test cases run against an isolated in-memory test database without modifying your development or Supabase records.
 
 ---
 
-## 8. Common Troubleshooting (Windows & MySQL)
+## 9. Common Troubleshooting (Windows & MySQL)
 
 | Issue | Cause | Solution |
 | :--- | :--- | :--- |
@@ -234,7 +342,7 @@ All test cases run against an isolated in-memory test database without modifying
 
 ---
 
-## 9. Viva Q&A Guide for Students
+## 10.  Q&A Guide 
 
 **Q1: Why did you choose Python Flask instead of Django or Node.js?**  
 *Answer:* Flask provides a clean, unbloated microframework architecture that allows full transparency over every route, middleware, session check, and database transaction. It makes demonstrating modular Blueprints (`auth`, `help_requests`, `volunteers`, `donations`, `admin`) straightforward without hidden framework magic.
@@ -255,6 +363,3 @@ All test cases run against an isolated in-memory test database without modifying
 2. All POST forms are protected by CSRF tokens via `Flask-WTF`.
 3. Server-side custom decorators (`@login_required`, `@role_required`, `@admin_required`) protect every privileged route.
 4. Contact information is conditionally masked: phone numbers and emails are hidden until a volunteer formally accepts a task, according to the seeker's preference.
-=======
-# Community-help-connect
->>>>>>> e5c75ab2d90d0ca9ff67a9c7a77973e4bb608b46

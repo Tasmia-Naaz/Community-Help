@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Available Donor Resources - Community Help Connect{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">Available Donor Resources</h2>
+            <p class="text-secondary mb-0">Start a private conversation to ask about availability, quantities, or collection arrangements.</p>
+        </div>
+        <a href="{{ url_for('messaging.inbox') }}" class="btn btn-outline-primary"><i class="bi bi-chat-dots me-1"></i>Messages</a>
+    </div>
+    <div class="row g-3">
+        {% for resource in resources %}
+        <div class="col-md-6 col-xl-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between gap-2">
+                        <span class="category-badge">{{ resource.category }}</span>
+                        {% if resource.is_expired %}<span class="badge bg-secondary">Unavailable</span>{% else %}<span class="badge bg-success">Available</span>{% endif %}
+                    </div>
+                    <h5 class="fw-bold mt-3">{{ resource.name or resource.category }}</h5>
+                    <p class="text-secondary">{{ resource.description }}</p>
+                    <dl class="row small mb-0">
+                        <dt class="col-5">Quantity</dt><dd class="col-7">{{ resource.quantity }} {{ resource.unit }}</dd>
+                        <dt class="col-5">Locality</dt><dd class="col-7">{{ resource.locality }}</dd>
+                        <dt class="col-5">Donor</dt><dd class="col-7">{{ resource.donor.full_name }}</dd>
+                    </dl>
+                </div>
+                <div class="card-footer bg-white border-0">
+                    {% if resource.status == 'Available' and resource.quantity > 0 and not resource.is_expired %}
+                    <form method="POST" action="{{ url_for('messaging.contact_donor', resource_id=resource.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-primary w-100" type="submit"><i class="bi bi-chat-dots me-1"></i>Contact Donor</button>
+                    </form>
+                    {% else %}
+                    <button class="btn btn-secondary w-100" type="button" disabled>Currently unavailable</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12"><div class="alert alert-info">No donor resources are currently listed.</div></div>
+        {% endfor %}
+    </div>
+    {% if resources.pages > 1 %}
+    <nav class="mt-4" aria-label="Resource listing pages">
+        <ul class="pagination justify-content-center">
+            <li class="page-item {% if not resources.has_prev %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('messaging.browse_resources', page=resources.prev_num if resources.has_prev else 1) }}">Previous</a>
+            </li>
+            <li class="page-item disabled"><span class="page-link">Page {{ resources.page }} of {{ resources.pages }}</span></li>
+            <li class="page-item {% if not resources.has_next %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('messaging.browse_resources', page=resources.next_num if resources.has_next else resources.pages) }}">Next</a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

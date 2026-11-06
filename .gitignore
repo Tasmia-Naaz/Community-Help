@@ -13,11 +13,16 @@ __pycache__/
 .env
 .env.*
 !.env.example
+.flaskenv
 
 # Flask instance folder & SQLite local dev/test files
 instance/
 *.db
+*.db-*
+*.sqlite
 *.sqlite3
+*.sqlite-*
+*.sqlite3-*
 
 # IDE & Editor settings
 .vscode/
@@ -27,16 +32,25 @@ instance/
 
 # Pytest & coverage cache
 .pytest_cache/
+.hypothesis/
+.tox/
+.nox/
 .mypy_cache/
 .ruff_cache/
+.cache/
 .coverage
+.coverage.*
+coverage/
 htmlcov/
 
 # Logs and generated package/build files
 *.log
+*.pid
 build/
 dist/
 *.egg-info/
+pip-wheel-metadata/
+wheels/
 
 # Operating system artifacts
 Thumbs.db
@@ -46,4 +60,3 @@ Desktop.ini
 # Distribution / Archives
 *.zip
 *.tar.gz
-.vscode

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
-from flask import request
+from flask import g, request
 from extensions import db
-from models import Notification, StatusHistory, EmergencyEvent, HelpRequest, User
+from models import Notification, StatusHistory, EmergencyEvent, HelpRequest, User, VolunteerVerification
 
 # In-memory dictionary for login rate limiting: {ip_or_email: [timestamp1, timestamp2, ...]}
 _login_attempts = {}
@@ -62,7 +62,13 @@ def broadcast_to_volunteers(locality, title, message, link=None):
     Broadcasts an in-app notification to all active volunteers in a specific locality,
     or to all volunteers if locality is 'ALL'.
     """
-    query = User.query.filter_by(role='volunteer', is_suspended=False)
+    query = User.query.join(
+        VolunteerVerification, User.id == VolunteerVerification.volunteer_id
+    ).filter(
+        User.role == 'volunteer',
+        User.is_suspended.is_(False),
+        VolunteerVerification.verification_status == 'approved'
+    )
     if locality and locality.upper() != 'ALL':
         # Exact or case-insensitive locality match
         query = query.filter(User.locality.ilike(f"%{locality}%"))
@@ -91,7 +97,14 @@ def record_status_change(entity_type, entity_id, previous_status, new_status, ch
 
 def get_active_emergency():
     """Retrieve the latest active emergency event if one exists."""
-    return EmergencyEvent.query.filter_by(is_active=True).order_by(EmergencyEvent.activated_at.desc()).first()
+    if getattr(g, '_active_emergency_loaded', False):
+        return g._active_emergency
+
+    g._active_emergency = EmergencyEvent.query.filter_by(
+        is_active=True
+    ).order_by(EmergencyEvent.activated_at.desc()).first()
+    g._active_emergency_loaded = True
+    return g._active_emergency
 
 
 def validate_request_transition(current_status, new_status, user_role, is_owner=False, is_assignee=False):

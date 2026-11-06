@@ -54,6 +54,37 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    // Show progress while a document upload is being validated and stored.
+    const loadingForms = document.querySelectorAll('form[data-loading-form]');
+    loadingForms.forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (e.defaultPrevented) return;
+
+            const button = form.querySelector('button[type="submit"], input[type="submit"]');
+            if (!button) return;
+
+            const label = form.getAttribute('data-loading-text') || 'Please wait...';
+            button.disabled = true;
+            const status = document.createElement('span');
+            status.className = 'visually-hidden';
+            status.setAttribute('role', 'status');
+            status.textContent = label;
+            form.append(status);
+
+            if (button instanceof HTMLInputElement) {
+                button.value = label;
+                return;
+            }
+
+            button.textContent = label;
+            const spinner = document.createElement('span');
+            spinner.className = 'spinner-border spinner-border-sm me-2';
+            spinner.setAttribute('role', 'status');
+            spinner.setAttribute('aria-hidden', 'true');
+            button.prepend(spinner);
+        });
+    });
+
     // 5. Tooltip Initialization
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (tooltipTriggerEl) {

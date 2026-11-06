@@ -94,22 +94,48 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('messaging.inbox') }}">
+                            <i class="bi bi-chat-dots me-1"></i> Messages
+                            {% if unread_message_count %}<span class="badge rounded-pill bg-danger">{{ unread_message_count }}</span>{% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link text-warning fw-semibold" href="{{ url_for('help_requests.new_request') }}">
                             <i class="bi bi-plus-circle-fill me-1"></i> Request Help
                         </a>
                     </li>
                     {% elif current_user.is_volunteer %}
                     <li class="nav-item">
+                        {% if current_user.volunteer_verification and current_user.volunteer_verification.verification_status == 'approved' %}
                         <a class="nav-link {% if 'volunteers' in request.endpoint %}active{% endif %}"
                             href="{{ url_for('volunteers.volunteer_dashboard') }}">
                             <i class="bi bi-people-fill me-1"></i> Volunteer Hub
                         </a>
+                        {% else %}
+                        <a class="nav-link {% if request.endpoint == 'auth.volunteer_verification_status' %}active{% endif %}" href="{{ url_for('auth.volunteer_verification_status') }}">
+                            <i class="bi bi-shield-check me-1"></i> Verification Status
+                        </a>
+                        {% endif %}
                     </li>
+                    {% if current_user.volunteer_verification and current_user.volunteer_verification.verification_status == 'approved' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('messaging.inbox') }}">
+                            <i class="bi bi-chat-dots me-1"></i> Messages
+                            {% if unread_message_count %}<span class="badge rounded-pill bg-danger">{{ unread_message_count }}</span>{% endif %}
+                        </a>
+                    </li>
+                    {% endif %}
                     {% elif current_user.is_donor %}
                     <li class="nav-item">
                         <a class="nav-link {% if 'donations' in request.endpoint %}active{% endif %}"
                             href="{{ url_for('donations.donor_dashboard') }}">
                             <i class="bi bi-box2-heart me-1"></i> Donor Hub
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('messaging.inbox') }}">
+                            <i class="bi bi-chat-dots me-1"></i> Messages
+                            {% if unread_message_count %}<span class="badge rounded-pill bg-danger">{{ unread_message_count }}</span>{% endif %}
                         </a>
                     </li>
                     <li class="nav-item">
@@ -178,14 +204,25 @@
                                         class="bi bi-speedometer2 me-2"></i>My Requests</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('help_requests.new_request') }}"><i
                                         class="bi bi-plus-circle me-2"></i>New Request</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('messaging.inbox') }}"><i
+                                        class="bi bi-chat-dots me-2"></i>Messages{% if unread_message_count %} ({{ unread_message_count }}){% endif %}</a></li>
                             {% elif current_user.is_volunteer %}
+                            {% if current_user.volunteer_verification and current_user.volunteer_verification.verification_status == 'approved' %}
                             <li><a class="dropdown-item" href="{{ url_for('volunteers.volunteer_dashboard') }}"><i
                                         class="bi bi-list-task me-2"></i>Browse Requests</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('messaging.inbox') }}"><i
+                                        class="bi bi-chat-dots me-2"></i>Messages{% if unread_message_count %} ({{ unread_message_count }}){% endif %}</a></li>
+                            {% else %}
+                            <li><a class="dropdown-item" href="{{ url_for('auth.volunteer_verification_status') }}"><i
+                                        class="bi bi-shield-check me-2"></i>Verification Status</a></li>
+                            {% endif %}
                             {% elif current_user.is_donor %}
                             <li><a class="dropdown-item" href="{{ url_for('donations.donor_dashboard') }}"><i
                                         class="bi bi-box-seam me-2"></i>My Resource Listings</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('donations.new_resource') }}"><i
                                         class="bi bi-plus-square me-2"></i>Donate Items</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('messaging.inbox') }}"><i
+                                        class="bi bi-chat-dots me-2"></i>Messages{% if unread_message_count %} ({{ unread_message_count }}){% endif %}</a></li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('auth.notifications') }}"><i
                                         class="bi bi-bell me-2"></i>Notifications</a></li>

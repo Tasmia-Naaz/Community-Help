@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import math
 from flask import render_template, redirect, url_for, flash, request, g, abort
 from sqlalchemy import update
+from sqlalchemy.orm import joinedload
 from extensions import db
 from models import HelpRequest, ResourceListing, ResourceRequest, StatusHistory, User
 from forms import StatusUpdateForm
@@ -50,7 +51,9 @@ def volunteer_dashboard():
     open_requests = [item[1] for item in scored_requests]
 
     # Volunteer's assigned tasks
-    assigned_tasks = HelpRequest.query.filter_by(assigned_volunteer_id=user.id)\
+    assigned_tasks = HelpRequest.query.options(
+        joinedload(HelpRequest.seeker)
+    ).filter_by(assigned_volunteer_id=user.id)\
         .order_by(HelpRequest.updated_at.desc()).all()
 
     resource_query = ResourceListing.query.filter(
@@ -78,7 +81,9 @@ def volunteer_dashboard():
         available_resources = [resource for resource in available_resources if resource.status == 'Available']
 
     resource_categories = [row[0] for row in db.session.query(ResourceListing.category).distinct().order_by(ResourceListing.category).all()]
-    resource_requests = ResourceRequest.query.filter_by(volunteer_id=user.id)\
+    resource_requests = ResourceRequest.query.options(
+        joinedload(ResourceRequest.resource)
+    ).filter_by(volunteer_id=user.id)\
         .order_by(ResourceRequest.updated_at.desc()).all()
 
     # Metrics

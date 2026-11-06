@@ -1,10 +1,16 @@
 from datetime import datetime, timezone
-from flask import render_template, redirect, url_for, flash, request, g, abort
+from flask import current_app, render_template, redirect, url_for, flash, request, g, abort
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload, selectinload
 from extensions import db
-from models import User, HelpRequest, ResourceListing, EmergencyEvent, StatusHistory, Notification
+from models import (
+    User, HelpRequest, ResourceListing, EmergencyEvent, StatusHistory, Notification,
+    VolunteerVerification, VolunteerVerificationHistory, Conversation, ConversationReport, Message
+)
 from forms import EmergencyEventForm
 from decorators import admin_required
-from helpers import get_active_emergency, broadcast_to_volunteers, record_status_change
+from helpers import get_active_emergency, broadcast_to_volunteers, record_status_change, create_notification
+from document_storage import DocumentStorageError, create_document_signed_url
 from . import admin_bp
 
 
@@ -17,12 +23,20 @@ def dashboard():
     """
     # 1. Total KPI Metrics
     total_users = User.query.count()
-    total_requests = HelpRequest.query.count()
-    open_requests = HelpRequest.query.filter_by(status='Pending').count()
-    in_progress_requests = HelpRequest.query.filter_by(status='In Progress').count()
-    completed_requests = HelpRequest.query.filter_by(status='Completed').count()
-    total_resources = ResourceListing.query.count()
-    active_resources = ResourceListing.query.filter_by(status='Available').count()
+    request_counts = dict(db.session.query(
+        HelpRequest.status,
+        func.count(HelpRequest.id)
+    ).group_by(HelpRequest.status).all())
+    total_requests = sum(request_counts.values())
+    open_requests = request_counts.get('Pending', 0)
+    in_progress_requests = request_counts.get('In Progress', 0)
+    completed_requests = request_counts.get('Completed', 0)
+    resource_counts = dict(db.session.query(
+        ResourceListing.status,
+        func.count(ResourceListing.id)
+    ).group_by(ResourceListing.status).all())
+    total_resources = sum(resource_counts.values())
+    active_resources = resource_counts.get('Available', 0)
 
     # 2. Search & Filtering for Users
     user_search = request.args.get('user_search', '').strip()
@@ -33,20 +47,37 @@ def dashboard():
             (User.email.ilike(f"%{user_search}%")) |
             (User.locality.ilike(f"%{user_search}%"))
         )
-    users_list = user_query.order_by(User.created_at.desc()).limit(50).all()
+    users_list = user_query.options(
+        joinedload(User.volunteer_verification)
+    ).order_by(User.created_at.desc()).limit(50).all()
 
     # 3. Recent Requests
-    recent_requests = HelpRequest.query.order_by(HelpRequest.created_at.desc()).limit(30).all()
+    recent_requests = HelpRequest.query.options(
+        joinedload(HelpRequest.seeker),
+        joinedload(HelpRequest.assigned_volunteer)
+    ).order_by(HelpRequest.created_at.desc()).limit(30).all()
 
     # 4. Recent Resources
-    recent_resources = ResourceListing.query.order_by(ResourceListing.created_at.desc()).limit(30).all()
+    recent_resources = ResourceListing.query.options(
+        joinedload(ResourceListing.donor)
+    ).order_by(ResourceListing.created_at.desc()).limit(30).all()
 
     # 5. Active Emergency & Event Logs
     active_emergency = get_active_emergency()
     past_emergencies = EmergencyEvent.query.order_by(EmergencyEvent.activated_at.desc()).limit(10).all()
 
     # 6. Recent Audit Status History
-    recent_history = StatusHistory.query.order_by(StatusHistory.created_at.desc()).limit(20).all()
+    recent_history = StatusHistory.query.options(
+        joinedload(StatusHistory.changed_by)
+    ).order_by(StatusHistory.created_at.desc()).limit(20).all()
+    volunteer_verifications = VolunteerVerification.query.join(
+        User, User.id == VolunteerVerification.volunteer_id
+    ).filter(
+        User.role == 'volunteer'
+    ).options(
+        joinedload(VolunteerVerification.volunteer),
+        selectinload(VolunteerVerification.history).joinedload(VolunteerVerificationHistory.actor)
+    ).order_by(VolunteerVerification.verification_submitted_at.desc()).limit(100).all()
 
     return render_template(
         'admin_dashboard.html',
@@ -63,8 +94,143 @@ def dashboard():
         active_emergency=active_emergency,
         past_emergencies=past_emergencies,
         recent_history=recent_history,
+        volunteer_verifications=volunteer_verifications,
         user_search=user_search
     )
+
+
+@admin_bp.route('/conversation-reports')
+@admin_required
+def conversation_reports():
+    page = request.args.get('page', 1, type=int)
+    reports = ConversationReport.query.options(
+        joinedload(ConversationReport.reporter),
+        joinedload(ConversationReport.conversation).joinedload(Conversation.help_seeker),
+        joinedload(ConversationReport.conversation).joinedload(Conversation.donor),
+        joinedload(ConversationReport.conversation).joinedload(Conversation.resource_listing)
+    ).order_by(ConversationReport.created_at.desc()).paginate(
+        page=page,
+        per_page=20,
+        error_out=False
+    )
+
+    report_id = request.args.get('report', type=int)
+    selected_report = None
+    recent_messages = []
+    if report_id:
+        selected_report = ConversationReport.query.options(
+            joinedload(ConversationReport.reporter),
+            joinedload(ConversationReport.conversation).joinedload(Conversation.help_seeker),
+            joinedload(ConversationReport.conversation).joinedload(Conversation.donor),
+            joinedload(ConversationReport.conversation).joinedload(Conversation.resource_listing)
+        ).filter_by(id=report_id).first_or_404()
+        recent_messages = Message.query.options(
+            joinedload(Message.sender)
+        ).filter_by(
+            conversation_id=selected_report.conversation_id
+        ).order_by(Message.id.desc()).limit(50).all()
+        recent_messages.reverse()
+
+    return render_template(
+        'admin_conversation_reports.html',
+        reports=reports,
+        selected_report=selected_report,
+        recent_messages=recent_messages
+    )
+
+
+@admin_bp.route('/volunteers/<int:volunteer_id>/verification/<action>', methods=['POST'])
+@admin_required
+def review_volunteer(volunteer_id, action):
+    verification = VolunteerVerification.query.join(
+        User, User.id == VolunteerVerification.volunteer_id
+    ).filter(
+        VolunteerVerification.volunteer_id == volunteer_id,
+        User.role == 'volunteer'
+    ).first_or_404()
+    if verification.verification_status == 'suspended':
+        flash('This volunteer is suspended and cannot be reviewed further.', 'warning')
+        return redirect(url_for('admin.dashboard'))
+
+    message = request.form.get('message', '').strip()
+    allowed_actions = {'approve', 'reject', 'request-information', 'suspend'}
+    if action not in allowed_actions:
+        abort(404)
+    if action in {'reject', 'request-information', 'suspend'} and not message:
+        flash('A reason or message is required for this action.', 'danger')
+        return redirect(url_for('admin.dashboard'))
+    if action == 'suspend' and verification.verification_status != 'approved':
+        flash('Only an approved volunteer can be suspended.', 'warning')
+        return redirect(url_for('admin.dashboard'))
+    if action == 'approve' and (not verification.id_document_path or not verification.id_document_type):
+        flash('A volunteer must have an ID document on file before approval.', 'warning')
+        return redirect(url_for('admin.dashboard'))
+    if action in {'reject', 'request-information'} and verification.verification_status == 'approved':
+        flash('An approved volunteer must be suspended rather than reviewed as an application.', 'warning')
+        return redirect(url_for('admin.dashboard'))
+
+    now = datetime.now(timezone.utc)
+    if action == 'approve':
+        verification.verification_status = 'approved'
+        verification.verification_notes = None
+        history_action = 'approved'
+        notice_title = 'Volunteer application approved'
+        notice_message = 'Your volunteer account has been verified. You can now access volunteer features.'
+    elif action == 'reject':
+        verification.verification_status = 'rejected'
+        verification.verification_notes = message
+        history_action = 'rejected'
+        notice_title = 'Volunteer application not approved'
+        notice_message = message
+    elif action == 'request-information':
+        verification.verification_notes = message
+        history_action = 'information_requested'
+        notice_title = 'Additional volunteer documents requested'
+        notice_message = message
+    else:
+        verification.verification_status = 'suspended'
+        verification.verification_notes = message
+        history_action = 'suspended'
+        notice_title = 'Volunteer account suspended'
+        notice_message = message
+
+    verification.verification_reviewed_at = now
+    verification.verification_reviewed_by = g.current_user.id
+    db.session.add(VolunteerVerificationHistory(
+        verification_id=verification.id,
+        action=history_action,
+        status=verification.verification_status,
+        message=message or notice_message,
+        actor_id=g.current_user.id
+    ))
+    create_notification(
+        user_id=volunteer_id,
+        title=notice_title,
+        message=notice_message,
+        link=url_for('auth.volunteer_verification_status')
+    )
+    db.session.commit()
+    flash('Volunteer verification action recorded.', 'success')
+    return redirect(url_for('admin.dashboard'))
+
+
+@admin_bp.route('/volunteers/<int:volunteer_id>/documents/<document_type>')
+@admin_required
+def volunteer_document(volunteer_id, document_type):
+    verification = VolunteerVerification.query.filter_by(volunteer_id=volunteer_id).first_or_404()
+    paths = {
+        'id': verification.id_document_path,
+        'certificate': verification.certificate_path
+    }
+    if document_type not in paths or not paths[document_type]:
+        abort(404)
+    try:
+        signed_url = create_document_signed_url(paths[document_type], expires_in=60)
+    except DocumentStorageError as exc:
+        current_app.logger.error('Could not create volunteer document preview URL: %s', exc)
+        flash('The private document preview is temporarily unavailable.', 'danger')
+        return redirect(url_for('admin.dashboard')), 503
+    return redirect(signed_url)
 
 
 @admin_bp.route('/users/<int:user_id>/toggle-suspend', methods=['POST'])

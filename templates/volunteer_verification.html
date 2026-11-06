@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Volunteer Verification - Community Help Connect{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4 p-md-5">
+                    <h2 class="fw-bold mb-3"><i class="bi bi-shield-check text-primary me-2"></i>Volunteer Verification</h2>
+                    {% if verification.verification_status == 'approved' %}
+                    <div class="alert alert-success">Your volunteer account has been verified. You can now access the volunteer dashboard.</div>
+                    <a class="btn btn-success" href="{{ url_for('volunteers.volunteer_dashboard') }}">Open Volunteer Dashboard</a>
+                    {% elif verification.verification_status == 'suspended' %}
+                    <div class="alert alert-danger">Your volunteer account is currently suspended.</div>
+                    {% elif information_requested %}
+                    <div class="alert alert-warning">Admin has requested additional documents.</div>
+                    <p class="text-secondary">Please upload corrected or additional documents below. Your volunteer access remains blocked until approval.</p>
+                    {% elif verification.verification_status == 'rejected' %}
+                    <div class="alert alert-danger">Your application was not approved. Please review the admin's reason and resubmit.</div>
+                    {% elif verification.verification_status == 'resubmitted' %}
+                    <div class="alert alert-info">Your documents have been resubmitted and are awaiting review.</div>
+                    {% else %}
+                    <div class="alert alert-info">Your documents are under review.</div>
+                    {% endif %}
+
+                    {% if verification.verification_notes %}
+                    <div class="mb-4"><strong>Administrator's message:</strong><p class="mb-0 mt-1">{{ verification.verification_notes }}</p></div>
+                    {% endif %}
+                    <dl class="row small text-secondary">
+                        <dt class="col-sm-4">Status</dt><dd class="col-sm-8 text-capitalize">{{ verification.verification_status }}</dd>
+                        <dt class="col-sm-4">Submitted</dt><dd class="col-sm-8">{{ verification.verification_submitted_at.strftime('%d %b %Y, %H:%M') if verification.verification_submitted_at else 'N/A' }}</dd>
+                    </dl>
+
+                    {% if verification.verification_status == 'rejected' or information_requested %}
+                    <hr class="my-4">
+                    <h5 class="fw-bold">Resubmit verification documents</h5>
+                    <form method="POST" enctype="multipart/form-data" action="{{ url_for('auth.resubmit_volunteer_documents') }}" data-loading-form data-loading-text="Uploading documents securely...">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="id_document_type">ID Document Type</label>
+                            <select class="form-select" id="id_document_type" name="id_document_type" required>
+                                <option value="">Select document type</option>
+                                <option value="national_id">National ID</option>
+                                <option value="passport">Passport</option>
+                                <option value="drivers_license">Driver's license</option>
+                                <option value="other">Other government-issued ID</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="id_document">Updated ID Document (required)</label>
+                            <input class="form-control" id="id_document" name="id_document" type="file" accept=".pdf,.jpg,.jpeg,.png" required>
+                            <div class="form-text">PDF, JPG, JPEG, or PNG; maximum 5 MB.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="volunteer_certificate">Volunteer Certificate (optional)</label>
+                            <input class="form-control" id="volunteer_certificate" name="volunteer_certificate" type="file" accept=".pdf,.jpg,.jpeg,.png">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="volunteering_experience">Volunteering Experience (optional)</label>
+                            <textarea class="form-control" id="volunteering_experience" name="volunteering_experience" maxlength="2000" rows="3">{{ verification.volunteering_experience or '' }}</textarea>
+                        </div>
+                        <button class="btn btn-primary" type="submit">Submit Updated Documents</button>
+                    </form>
+                    {% endif %}
+
+                    {% if verification.history %}
+                    <hr class="my-4">
+                    <h5 class="fw-bold">Verification History</h5>
+                    <ul class="list-group list-group-flush">
+                        {% for item in verification.history %}
+                        <li class="list-group-item px-0">
+                            <strong class="text-capitalize">{{ item.action.replace('_', ' ') }}</strong>
+                            <span class="text-secondary small">· {{ item.created_at.strftime('%d %b %Y, %H:%M') }}</span>
+                            {% if item.message %}<div class="small text-secondary mt-1">{{ item.message }}</div>{% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

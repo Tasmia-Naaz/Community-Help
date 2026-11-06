@@ -15,6 +15,9 @@
             </p>
         </div>
         <div class="d-flex gap-2">
+            <a href="{{ url_for('admin.conversation_reports') }}" class="btn btn-outline-danger fw-semibold">
+                <i class="bi bi-flag me-1"></i> Review Conversation Reports
+            </a>
             {% if active_emergency and active_emergency.is_active %}
             <form method="POST" action="{{ url_for('admin.deactivate_emergency', event_id=active_emergency.id) }}" data-confirm="Deactivate the active Emergency Mode across the community?">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -93,6 +96,11 @@
     <!-- Tabs Navigation for Management -->
     <ul class="nav nav-pills mb-4" id="adminTabs" role="tablist">
         <li class="nav-item" role="presentation">
+            <button class="nav-link" id="volunteer-verification-tab" data-bs-toggle="pill" data-bs-target="#tab-volunteer-verification" type="button" role="tab">
+                <i class="bi bi-person-vcard me-1"></i> Volunteer Verification ({{ volunteer_verifications|length }})
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link active" id="users-tab" data-bs-toggle="pill" data-bs-target="#tab-users" type="button" role="tab">
                 <i class="bi bi-people me-1"></i> User Accounts ({{ users|length }})
             </button>
@@ -120,6 +128,85 @@
     </ul>
 
     <div class="tab-content" id="adminTabContent">
+        <div class="tab-pane fade" id="tab-volunteer-verification" role="tabpanel">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="fw-bold mb-0">Volunteer Verification Management</h5>
+                    <p class="small text-secondary mb-0">Documents are private; preview links expire after 60 seconds.</p>
+                </div>
+                <div class="card-body p-0">
+                    {% if volunteer_verifications %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr><th class="ps-3">Volunteer</th><th>Contact / Locality</th><th>ID / Documents</th><th>Submitted</th><th>Status / History</th><th class="pe-3">Review actions</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for verification in volunteer_verifications %}
+                                <tr>
+                                    <td class="ps-3"><strong>{{ verification.volunteer.full_name }}</strong><div class="small text-muted">{{ verification.volunteer.email }}</div></td>
+                                    <td><div>{{ verification.volunteer.phone }}</div><small class="text-secondary">{{ verification.volunteer.locality }}</small></td>
+                                    <td>
+                                        <div class="small mb-1">{{ verification.id_document_type or 'Not provided' }}</div>
+                                        {% if verification.id_document_path %}
+                                        <a class="btn btn-sm btn-outline-primary mb-1" href="{{ url_for('admin.volunteer_document', volunteer_id=verification.volunteer_id, document_type='id') }}" target="_blank" rel="noopener">View ID document</a>
+                                        {% endif %}
+                                        {% if verification.certificate_path %}
+                                        <a class="btn btn-sm btn-outline-secondary mb-1" href="{{ url_for('admin.volunteer_document', volunteer_id=verification.volunteer_id, document_type='certificate') }}" target="_blank" rel="noopener">View certificate</a>
+                                        {% endif %}
+                                        {% if verification.volunteering_experience %}<div class="small text-muted mt-1">{{ verification.volunteering_experience }}</div>{% endif %}
+                                    </td>
+                                    <td class="small">{{ verification.verification_submitted_at.strftime('%d %b %Y, %H:%M') if verification.verification_submitted_at else 'N/A' }}</td>
+                                    <td>
+                                        <span class="badge {% if verification.verification_status == 'approved' %}bg-success{% elif verification.verification_status == 'rejected' or verification.verification_status == 'suspended' %}bg-danger{% else %}bg-warning text-dark{% endif %} text-capitalize">{{ verification.verification_status }}</span>
+                                        {% if verification.verification_notes %}<div class="small text-secondary mt-1">{{ verification.verification_notes }}</div>{% endif %}
+                                        <details class="small mt-2">
+                                            <summary>View verification history</summary>
+                                            <ul class="ps-3 mt-2">
+                                                {% for item in verification.history %}
+                                                <li>{{ item.created_at.strftime('%d %b %Y, %H:%M') }} — {{ item.action.replace('_', ' ') }}{% if item.actor %} by {{ item.actor.full_name }}{% endif %}{% if item.message %}: {{ item.message }}{% endif %}</li>
+                                                {% else %}<li>No history recorded.</li>{% endfor %}
+                                            </ul>
+                                        </details>
+                                    </td>
+                                    <td class="pe-3">
+                                        <div class="d-flex flex-column gap-2">
+                                            {% if verification.verification_status not in ['approved', 'suspended'] %}
+                                            <form method="POST" action="{{ url_for('admin.review_volunteer', volunteer_id=verification.volunteer_id, action='approve') }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button class="btn btn-sm btn-success w-100" type="submit">Approve Volunteer</button>
+                                            </form>
+                                            <form method="POST" action="{{ url_for('admin.review_volunteer', volunteer_id=verification.volunteer_id, action='reject') }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input class="form-control form-control-sm mb-1" name="message" maxlength="2000" placeholder="Rejection reason (required)" required>
+                                                <button class="btn btn-sm btn-outline-danger w-100" type="submit">Reject Application</button>
+                                            </form>
+                                            <form method="POST" action="{{ url_for('admin.review_volunteer', volunteer_id=verification.volunteer_id, action='request-information') }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input class="form-control form-control-sm mb-1" name="message" maxlength="2000" placeholder="Requested information (required)" required>
+                                                <button class="btn btn-sm btn-outline-primary w-100" type="submit">Request Information</button>
+                                            </form>
+                                            {% elif verification.verification_status == 'approved' %}
+                                            <form method="POST" action="{{ url_for('admin.review_volunteer', volunteer_id=verification.volunteer_id, action='suspend') }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input class="form-control form-control-sm mb-1" name="message" maxlength="2000" placeholder="Suspension reason (required)" required>
+                                                <button class="btn btn-sm btn-outline-danger w-100" type="submit">Suspend Volunteer</button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">No volunteer verification applications are available.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
         <!-- 1. USER ACCOUNTS TAB -->
         <div class="tab-pane fade show active" id="tab-users" role="tabpanel">
             <div class="card shadow-sm border-0">
@@ -167,7 +254,7 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if u.is_suspended %}
+                                        {% if u.is_suspended or (u.volunteer_verification and u.volunteer_verification.verification_status == 'suspended') %}
                                             <span class="badge bg-danger"><i class="bi bi-slash-circle me-1"></i>Suspended</span>
                                         {% else %}
                                             <span class="badge bg-success bg-opacity-25 text-success">Active</span>

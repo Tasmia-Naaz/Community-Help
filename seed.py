@@ -9,7 +9,10 @@ import sys
 from datetime import datetime, timezone, timedelta
 from app import create_app
 from extensions import db
-from models import User, HelpRequest, ResourceListing, EmergencyEvent, StatusHistory, Notification
+from models import (
+    User, HelpRequest, ResourceListing, EmergencyEvent, StatusHistory, Notification,
+    VolunteerVerification, VolunteerVerificationHistory
+)
 
 
 def init_db(app):
@@ -28,8 +31,12 @@ def create_initial_admin(app):
         admin_email = "admin@communityhelp.org"
         existing = User.query.filter_by(email=admin_email).first()
         if existing:
-            print(f" [INFO] Admin account '{admin_email}' already exists. Skipping.")
-            return existing
+            admin_id = existing.id
+            existing.set_password("Admin@12345")
+            existing.is_suspended = False
+            db.session.commit()
+            print(f" [INFO] Admin account '{admin_email}' already exists. Demo password restored.")
+            return admin_id
 
         admin = User(
             full_name="System Administrator",
@@ -42,18 +49,20 @@ def create_initial_admin(app):
         )
         admin.set_password("Admin@12345")
         db.session.add(admin)
+        db.session.flush()
+        admin_id = admin.id
         db.session.commit()
         print(f" [OK] Master Admin created: {admin_email} | Password: Admin@12345")
-        return admin
+        return admin_id
 
 
 def seed_demo_data(app):
     """
     Populates realistic demo accounts, requests, and resource listings
-    for college viva demonstrations and local testing.
+    for  demonstrations and local testing.
     """
     with app.app_context():
-        admin = create_initial_admin(app)
+        admin_id = create_initial_admin(app)
 
         # 1. Demo Help Seeker
         seeker = User.query.filter_by(email="seeker@example.com").first()
@@ -66,8 +75,11 @@ def seed_demo_data(app):
                 role="help_seeker",
                 is_verified=True
             )
-            seeker.set_password("Seeker@123")
             db.session.add(seeker)
+        seeker.role = "help_seeker"
+        seeker.is_verified = True
+        seeker.is_suspended = False
+        seeker.set_password("Seeker@123")
 
         # 2. Demo Volunteer
         volunteer = User.query.filter_by(email="volunteer@example.com").first()
@@ -80,8 +92,11 @@ def seed_demo_data(app):
                 role="volunteer",
                 is_verified=True
             )
-            volunteer.set_password("Volunteer@123")
             db.session.add(volunteer)
+        volunteer.role = "volunteer"
+        volunteer.is_verified = True
+        volunteer.is_suspended = False
+        volunteer.set_password("Volunteer@123")
 
         # 3. Demo Donor
         donor = User.query.filter_by(email="donor@example.com").first()
@@ -94,10 +109,45 @@ def seed_demo_data(app):
                 role="donor",
                 is_verified=True
             )
-            donor.set_password("Donor@123")
             db.session.add(donor)
+        donor.role = "donor"
+        donor.is_verified = True
+        donor.is_suspended = False
+        donor.set_password("Donor@123")
 
         db.session.commit()
+        demo_verification = VolunteerVerification.query.filter_by(volunteer_id=volunteer.id).first()
+        if not demo_verification:
+            demo_verification = VolunteerVerification(
+                volunteer_id=volunteer.id,
+                verification_status='approved',
+                verification_reviewed_at=datetime.now(timezone.utc),
+                verification_reviewed_by=admin_id,
+                verification_notes='Pre-approved demo account; no identity documents are on file.'
+            )
+            db.session.add(demo_verification)
+            db.session.flush()
+            db.session.add(VolunteerVerificationHistory(
+                verification_id=demo_verification.id,
+                action='approved',
+                status='approved',
+                message='Pre-approved demo account; no identity documents are on file.',
+                actor_id=admin_id
+            ))
+            db.session.commit()
+        else:
+            if demo_verification.verification_status != 'approved':
+                demo_verification.verification_status = 'approved'
+                demo_verification.verification_reviewed_at = datetime.now(timezone.utc)
+                demo_verification.verification_reviewed_by = admin_id
+                db.session.add(VolunteerVerificationHistory(
+                    verification_id=demo_verification.id,
+                    action='approved',
+                    status='approved',
+                    message='Pre-approved demo account; no identity documents are on file.',
+                    actor_id=admin_id
+                ))
+                db.session.commit()
         print(" [OK] Demo user accounts created (Seeker, Volunteer, Donor).")
 
         # 4. Demo Help Requests across the 6 categories
@@ -264,15 +314,18 @@ def seed_demo_data(app):
         print(f" [OK] Added {created_res_count} sample resource listings.")
 
         # 6. Sample Notifications
-        Notification.query.filter_by(user_id=volunteer.id).delete()
-        n1 = Notification(
+        if not Notification.query.filter_by(
             user_id=volunteer.id,
-            title="Urgent Community Need in Your Area",
-            message="A critical medical assistance request was submitted in Indiranagar, Sector 4.",
-            link="/volunteers/dashboard"
-        )
-        db.session.add(n1)
-        db.session.commit()
+            title="Urgent Community Need in Your Area"
+        ).first():
+            n1 = Notification(
+                user_id=volunteer.id,
+                title="Urgent Community Need in Your Area",
+                message="A critical medical assistance request was submitted in Indiranagar, Sector 4.",
+                link="/volunteers/dashboard"
+            )
+            db.session.add(n1)
+            db.session.commit()
         print(" [OK] Initial notifications populated.")
         print("\n=== SEED COMPLETE ===")
         print("Admin Login:     admin@communityhelp.org / Admin@12345")

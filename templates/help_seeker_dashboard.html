@@ -49,6 +49,42 @@
         </div>
     </div>
 
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h5 class="fw-bold mb-0"><i class="bi bi-chat-dots me-2 text-primary"></i>Messages / Contact Donors</h5>
+            <div class="d-flex gap-2">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('messaging.inbox') }}">Messages{% if unread_message_count %} ({{ unread_message_count }} unread){% endif %}</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('messaging.browse_resources') }}">Browse all resources</a>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if available_resources %}
+            <div class="row g-3">
+                {% for resource in available_resources %}
+                <div class="col-md-6 col-xl-4">
+                    <div class="border rounded-3 p-3 h-100">
+                        <div class="d-flex justify-content-between gap-2">
+                            <span class="category-badge">{{ resource.category }}</span>
+                            {% if resource.is_expired %}<span class="badge bg-secondary">Unavailable</span>{% else %}<span class="badge bg-success">Available</span>{% endif %}
+                        </div>
+                        <div class="fw-bold mt-2">{{ resource.name or resource.category }}</div>
+                        <div class="small text-secondary">{{ resource.quantity }} {{ resource.unit }} · {{ resource.locality }}</div>
+                        {% if resource.status == 'Available' and resource.quantity > 0 and not resource.is_expired %}
+                        <form class="mt-3" method="POST" action="{{ url_for('messaging.contact_donor', resource_id=resource.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-primary" type="submit">Contact Donor</button>
+                        </form>
+                        {% else %}<div class="small text-muted mt-3">This resource is no longer available.</div>{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-secondary mb-0">No donor resources are currently listed. You can still view previous conversations in Messages.</p>
+            {% endif %}
+        </div>
+    </div>
+
     <!-- Requests Management Card -->
     <div class="card shadow-sm border-0">
         <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">

@@ -8,7 +8,7 @@ sys.path.insert(0, str(app_dir))
 
 from app import create_app
 from extensions import db
-from models import User
+from models import User, VolunteerVerification
 
 
 @pytest.fixture
@@ -48,6 +48,12 @@ def create_user(role='help_seeker', email='user@example.com', password='Password
     )
     user.set_password(password)
     db.session.add(user)
+    if role == 'volunteer':
+        db.session.flush()
+        db.session.add(VolunteerVerification(
+            volunteer_id=user.id,
+            verification_status='approved'
+        ))
     db.session.commit()
     # Eagerly access attributes so they remain cached on the object
     _ = (user.id, user.email, user.role, user.full_name, user.locality, user.is_suspended, user.is_verified)

@@ -1,8 +1,9 @@
 import os
 from flask import Flask, render_template, session, g
+from sqlalchemy import or_
 from config import config_by_name
 from extensions import db, csrf
-from models import User, Notification, EmergencyEvent, HelpRequest, ResourceListing, SERVICE_CATEGORIES
+from models import User, Notification, EmergencyEvent, HelpRequest, ResourceListing, Message, Conversation, SERVICE_CATEGORIES
 from helpers import get_active_emergency
 
 
@@ -10,10 +11,14 @@ def create_app(config_name=None):
     """Application factory for Community Help Connect."""
     if config_name is None:
         config_name = os.getenv('FLASK_ENV', 'development')
+    if config_name == 'production' and not os.getenv('SECRET_KEY'):
+        raise RuntimeError('SECRET_KEY must be configured in the environment for production.')
 
     app = Flask(__name__)
     config_obj = config_by_name.get(config_name, config_by_name['default'])
     app.config.from_object(config_obj)
+    if config_name == 'production':
+        app.config['SECRET_KEY'] = os.environ['SECRET_KEY']
 
     # Initialize extensions
     db.init_app(app)
@@ -25,12 +30,14 @@ def create_app(config_name=None):
     from volunteers import volunteers_bp
     from donations import donations_bp
     from admin import admin_bp
+    from messaging import messaging_bp
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(help_requests_bp, url_prefix='/requests')
     app.register_blueprint(volunteers_bp, url_prefix='/volunteers')
     app.register_blueprint(donations_bp, url_prefix='/donations')
     app.register_blueprint(admin_bp, url_prefix='/admin')
+    app.register_blueprint(messaging_bp, url_prefix='/messages')
 
     # Load current user before each request
     @app.before_request
@@ -46,6 +53,7 @@ def create_app(config_name=None):
     def inject_global_template_data():
         active_emergency = None
         unread_notifications_count = 0
+        unread_message_count = 0
         try:
             active_emergency = get_active_emergency()
             if g.current_user:
@@ -53,6 +61,15 @@ def create_app(config_name=None):
                     user_id=g.current_user.id,
                     is_read=False
                 ).count()
+                if g.current_user.role in ('help_seeker', 'donor', 'volunteer'):
+                    unread_message_count = Message.query.join(Conversation).filter(
+                        Message.sender_id != g.current_user.id,
+                        Message.is_read.is_(False),
+                        or_(
+                            Conversation.help_seeker_id == g.current_user.id,
+                            Conversation.donor_id == g.current_user.id
+                        )
+                    ).count()
         except Exception:
             # Handle situations before database tables are created
             pass
@@ -60,6 +77,7 @@ def create_app(config_name=None):
         return {
             'active_emergency': active_emergency,
             'unread_notifications_count': unread_notifications_count,
+            'unread_message_count': unread_message_count,
             'current_user': g.current_user,
             'SERVICE_CATEGORIES': SERVICE_CATEGORIES
         }

@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 from flask import render_template, redirect, url_for, flash, request, g, abort
 from sqlalchemy import update
+from sqlalchemy.orm import joinedload
 from extensions import db
-from models import ResourceListing, ResourceRequest, StatusHistory, User
+from models import ResourceListing, ResourceRequest, StatusHistory, User, Conversation
 from forms import ResourceListingForm, StatusUpdateForm
 from decorators import login_required, role_required
 from helpers import record_status_change, validate_resource_transition, broadcast_to_volunteers, create_notification
@@ -20,9 +21,13 @@ def donor_dashboard():
     status_filter = request.args.get('status', '').strip()
 
     listings = ResourceListing.query.filter_by(donor_id=user.id).order_by(ResourceListing.created_at.desc()).all()
-    resource_requests = ResourceRequest.query.join(ResourceListing).filter(
+    resource_requests = ResourceRequest.query.options(
+        joinedload(ResourceRequest.resource),
+        joinedload(ResourceRequest.volunteer)
+    ).join(ResourceListing).filter(
         ResourceListing.donor_id == user.id
     ).order_by(ResourceRequest.created_at.desc()).all()
+    conversation_count = Conversation.query.filter_by(donor_id=user.id).count()
 
     # Automatically audit and mark expired listings as Withdrawn
     has_expired_changes = False
@@ -61,6 +66,7 @@ def donor_dashboard():
         distributed_count=distributed_count,
         reserved_count=reserved_count,
         resource_requests=resource_requests,
+        conversation_count=conversation_count,
         current_filter=status_filter
     )
 

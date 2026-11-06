@@ -74,6 +74,13 @@ class User(db.Model):
         lazy=True,
         cascade='all, delete-orphan'
     )
+    volunteer_verification = db.relationship(
+        'VolunteerVerification',
+        foreign_keys='VolunteerVerification.volunteer_id',
+        backref='volunteer',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
     status_changes = db.relationship(
         'StatusHistory',
         backref='changed_by',
@@ -224,6 +231,122 @@ class Notification(db.Model):
 
     def __repr__(self) -> str:
         return f'<Notification {self.id} for User {self.user_id}>'
+
+
+class VolunteerVerification(db.Model):
+    """Private document metadata and current review state for a volunteer."""
+    __tablename__ = 'volunteer_verifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    volunteer_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False, unique=True, index=True
+    )
+    id_document_type = db.Column(db.String(40), nullable=True)
+    id_document_path = db.Column(db.String(500), nullable=True)
+    id_document_name = db.Column(db.String(255), nullable=True)
+    id_document_content_type = db.Column(db.String(100), nullable=True)
+    id_document_size = db.Column(db.Integer, nullable=True)
+    certificate_path = db.Column(db.String(500), nullable=True)
+    certificate_name = db.Column(db.String(255), nullable=True)
+    certificate_content_type = db.Column(db.String(100), nullable=True)
+    certificate_size = db.Column(db.Integer, nullable=True)
+    volunteering_experience = db.Column(db.Text, nullable=True)
+    verification_status = db.Column(db.String(20), nullable=False, default='pending', index=True)
+    verification_submitted_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    verification_reviewed_at = db.Column(db.DateTime, nullable=True)
+    verification_reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    verification_notes = db.Column(db.Text, nullable=True)
+
+    reviewer = db.relationship('User', foreign_keys=[verification_reviewed_by])
+    history = db.relationship(
+        'VolunteerVerificationHistory',
+        backref='verification',
+        lazy=True,
+        cascade='all, delete-orphan',
+        order_by='VolunteerVerificationHistory.created_at.desc()'
+    )
+
+
+class VolunteerVerificationHistory(db.Model):
+    """Audit history for volunteer review and resubmission actions."""
+    __tablename__ = 'volunteer_verification_history'
+
+    id = db.Column(db.Integer, primary_key=True)
+    verification_id = db.Column(
+        db.Integer, db.ForeignKey('volunteer_verifications.id', ondelete='CASCADE'),
+        nullable=False, index=True
+    )
+    action = db.Column(db.String(40), nullable=False)
+    status = db.Column(db.String(20), nullable=False)
+    message = db.Column(db.Text, nullable=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+
+    actor = db.relationship('User', foreign_keys=[actor_id])
+
+
+class Conversation(db.Model):
+    """Private conversation between a resource donor and another participant."""
+    __tablename__ = 'conversations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    # This legacy participant column also stores volunteer IDs in donor-volunteer threads.
+    help_seeker_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    donor_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    resource_listing_id = db.Column(
+        db.Integer, db.ForeignKey('resource_listings.id', ondelete='SET NULL'), nullable=True, index=True
+    )
+    status = db.Column(db.String(20), nullable=False, default='open', index=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+
+    help_seeker = db.relationship('User', foreign_keys=[help_seeker_id])
+    donor = db.relationship('User', foreign_keys=[donor_id])
+    resource_listing = db.relationship('ResourceListing')
+    messages = db.relationship(
+        'Message', backref='conversation', lazy=True,
+        cascade='all, delete-orphan', order_by='Message.created_at.asc()'
+    )
+
+
+class Message(db.Model):
+    """A message visible only to the two members of its conversation."""
+    __tablename__ = 'messages'
+    __table_args__ = (
+        db.Index('ix_messages_conversation_id_id', 'conversation_id', 'id'),
+        db.Index('ix_messages_conversation_unread', 'conversation_id', 'is_read', 'sender_id'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(
+        db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'),
+        nullable=False, index=True
+    )
+    sender_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    message_text = db.Column(db.String(2000), nullable=False)
+    is_read = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    read_at = db.Column(db.DateTime, nullable=True)
+
+    sender = db.relationship('User')
+
+
+class ConversationReport(db.Model):
+    """User reports about suspicious conversations, available to administrators."""
+    __tablename__ = 'conversation_reports'
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(
+        db.Integer, db.ForeignKey('conversations.id', ondelete='CASCADE'),
+        nullable=False, index=True
+    )
+    reporter_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    reason = db.Column(db.String(1000), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    conversation = db.relationship('Conversation')
+    reporter = db.relationship('User', foreign_keys=[reporter_id])
 
 
 class EmergencyEvent(db.Model):

@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Messages - Community Help Connect{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="bi bi-chat-dots-fill text-primary me-2"></i>Messages</h2>
+            <p class="text-secondary mb-0">Coordinate resource availability and collection without exposing private contact details.</p>
+        </div>
+        {% if current_user.role in ('help_seeker', 'volunteer') %}
+        <a class="btn btn-outline-primary" href="{{ url_for('messaging.browse_resources') }}">Browse available resources</a>
+        {% endif %}
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white fw-bold">Conversations</div>
+                <div class="list-group list-group-flush">
+                    {% for conversation in conversations.items %}
+                    {% set other = conversation.donor if current_user.id == conversation.help_seeker_id else conversation.help_seeker %}
+                    {% set latest = latest_messages.get(conversation.id) %}
+                    <a class="list-group-item list-group-item-action {% if selected and selected.id == conversation.id %}active{% endif %}" href="{{ url_for('messaging.inbox', conversation=conversation.id) }}">
+                        <div class="d-flex justify-content-between gap-2">
+                            <strong class="text-truncate">{{ other.full_name }}</strong>
+                            {% if unread_by_conversation[conversation.id] %}
+                            <span class="badge rounded-pill bg-danger">{{ unread_by_conversation[conversation.id] }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="small {% if selected and selected.id == conversation.id %}text-white-50{% else %}text-secondary{% endif %} text-truncate">
+                            {{ conversation.resource_listing.name or conversation.resource_listing.category if conversation.resource_listing else 'Resource listing unavailable' }}
+                        </div>
+                        <div class="small {% if selected and selected.id == conversation.id %}text-white-50{% else %}text-muted{% endif %} text-truncate">
+                            {{ latest.message_text if latest else 'Conversation started' }}
+                        </div>
+                    </a>
+                    {% else %}
+                    <div class="p-4 text-center text-muted">You have no conversations yet.</div>
+                    {% endfor %}
+                </div>
+                {% if conversations.pages > 1 %}
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+                    {% if conversations.has_prev %}
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('messaging.inbox', page=conversations.prev_num, conversation=selected.id if selected else None) }}">Previous</a>
+                    {% else %}<span></span>{% endif %}
+                    <span class="small text-muted">Page {{ conversations.page }} of {{ conversations.pages }}</span>
+                    {% if conversations.has_next %}
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('messaging.inbox', page=conversations.next_num, conversation=selected.id if selected else None) }}">Next</a>
+                    {% else %}<span></span>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                {% if selected %}
+                {% set other = selected.donor if current_user.id == selected.help_seeker_id else selected.help_seeker %}
+                <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <strong>{{ other.full_name }}</strong>
+                        <div class="small text-secondary">
+                            {% if selected.resource_listing %}
+                            {{ selected.resource_listing.name or selected.resource_listing.category }} · {{ selected.resource_listing.category }} · {{ selected.resource_listing.quantity }} {{ selected.resource_listing.unit }} · {{ selected.resource_listing.locality }} · {{ selected.resource_listing.status }}{% if selected.resource_listing.is_expired %} (expired){% endif %}
+                            {% else %}Linked resource listing is no longer available.{% endif %}
+                        </div>
+                    </div>
+                    <span class="badge {% if selected.status == 'open' %}bg-success{% else %}bg-secondary{% endif %} text-capitalize">{{ selected.status }}</span>
+                </div>
+                <div class="card-body d-flex flex-column" style="min-height: 420px;">
+                    <div id="chat-messages" class="flex-grow-1 overflow-auto mb-3" data-poll-url="{{ url_for('messaging.poll_messages', conversation_id=selected.id) }}" data-history-url="{{ url_for('messaging.older_messages', conversation_id=selected.id) }}">
+                        {% if has_older %}
+                        <div class="text-center mb-3"><button class="btn btn-sm btn-outline-secondary" id="load-older" type="button">Load older messages</button></div>
+                        {% endif %}
+                        {% for message in recent_messages %}
+                        <div class="d-flex mb-3 {% if message.sender_id == current_user.id %}justify-content-end{% endif %}" data-message-id="{{ message.id }}">
+                            <div class="rounded-3 px-3 py-2 {% if message.sender_id == current_user.id %}bg-primary text-white{% else %}bg-light border{% endif %}" style="max-width: 85%;">
+                                <div class="small fw-semibold">{{ 'You' if message.sender_id == current_user.id else message.sender.full_name }}</div>
+                                <div class="message-text">{{ message.message_text }}</div>
+                                <div class="small {% if message.sender_id == current_user.id %}text-white-50{% else %}text-muted{% endif %}">
+                                    {{ message.created_at.strftime('%d %b %Y, %H:%M') }}
+                                    {% if message.sender_id == current_user.id %}· {{ 'Read' if message.is_read else 'Sent' }}{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    {% if selected.status == 'open' %}
+                    <form id="message-form" method="POST" action="{{ url_for('messaging.send_message', conversation_id=selected.id) }}" class="d-flex gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <label class="visually-hidden" for="message_text">Message</label>
+                        <input class="form-control" id="message_text" name="message_text" maxlength="2000" placeholder="Ask about availability, quantity, or pickup..." required>
+                        <button class="btn btn-primary" type="submit"><i class="bi bi-send-fill me-1"></i>Send</button>
+                    </form>
+                    <div id="chat-status" class="small mt-2" role="status" aria-live="polite"></div>
+                    {% else %}
+                    <div class="alert alert-secondary mb-0">This conversation is closed.</div>
+                    {% endif %}
+                    <div class="d-flex flex-wrap justify-content-between gap-2 mt-3">
+                        <form method="POST" action="{{ url_for('messaging.report_conversation', conversation_id=selected.id) }}" class="d-flex gap-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input class="form-control form-control-sm" name="reason" maxlength="1000" placeholder="Report suspicious conversation" aria-label="Report reason" required>
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Report</button>
+                        </form>
+                        {% if current_user.role == 'donor' and selected.status == 'open' %}
+                        <form method="POST" action="{{ url_for('messaging.close_conversation', conversation_id=selected.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">Close conversation</button>
+                        </form>
+                        {% elif current_user.role == 'donor' and selected.status == 'closed' %}
+                        <form method="POST" action="{{ url_for('messaging.reopen_conversation', conversation_id=selected.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-sm btn-outline-primary" type="submit">Reopen conversation</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-chat-square-text display-4 text-secondary"></i>
+                    <h5 class="mt-3">Select a conversation</h5>
+                    <p class="text-secondary mb-0">{% if current_user.role in ('help_seeker', 'volunteer') %}Browse available donor resources to start a private conversation.{% else %}Conversations from Help Seekers and verified Volunteers will appear here.{% endif %}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% if selected and selected.status == 'open' %}
+<script>
+    (() => {
+        const container = document.getElementById('chat-messages');
+        const status = document.getElementById('chat-status');
+        const renderedIds = new Set(Array.from(container.querySelectorAll('[data-message-id]'), item => Number(item.dataset.messageId)));
+        let lastId = Math.max(0, ...renderedIds);
+        let timer;
+
+        function createMessageRow(message) {
+            const row = document.createElement('div');
+            row.className = `d-flex mb-3 ${message.is_mine ? 'justify-content-end' : ''}`;
+            row.dataset.messageId = message.id;
+            const bubble = document.createElement('div');
+            bubble.className = `rounded-3 px-3 py-2 ${message.is_mine ? 'bg-primary text-white' : 'bg-light border'}`;
+            bubble.style.maxWidth = '85%';
+            const sender = document.createElement('div');
+            sender.className = 'small fw-semibold';
+            sender.textContent = message.is_mine ? 'You' : message.sender;
+            const text = document.createElement('div');
+            text.textContent = message.text;
+            const time = document.createElement('div');
+            time.className = `small ${message.is_mine ? 'text-white-50' : 'text-muted'}`;
+            time.textContent = new Date(message.created_at).toLocaleString();
+            bubble.append(sender, text, time);
+            row.appendChild(bubble);
+            return row;
+        }
+
+        function appendMessage(message) {
+            if (renderedIds.has(message.id)) return;
+            renderedIds.add(message.id);
+            lastId = Math.max(lastId, message.id);
+            container.appendChild(createMessageRow(message));
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function poll() {
+            if (document.hidden) {
+                timer = window.setTimeout(poll, 5000);
+                return;
+            }
+            try {
+                const response = await fetch(`${container.dataset.pollUrl}?after=${lastId}`, {headers: {'Accept': 'application/json'}});
+                if (!response.ok) {
+                    throw new Error('New messages could not be refreshed. Check your connection or reload this page.');
+                }
+                const data = await response.json();
+                if (data.status === 'closed') {
+                    window.location.reload();
+                    return;
+                }
+                status.textContent = '';
+                data.messages.forEach(appendMessage);
+            } catch (error) {
+                status.textContent = error.message || 'New messages could not be refreshed.';
+                status.className = 'small text-danger mt-2';
+            } finally {
+                timer = window.setTimeout(poll, 5000);
+            }
+        }
+
+        const form = document.getElementById('message-form');
+        if (form) {
+            form.addEventListener('submit', async event => {
+                event.preventDefault();
+                const button = form.querySelector('button[type="submit"]');
+                if (button.disabled) return;
+                button.disabled = true;
+                status.textContent = 'Sending...';
+                status.className = 'small text-secondary mt-2';
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        headers: {'Accept': 'application/json'},
+                        body: new URLSearchParams(new FormData(form))
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Message could not be sent.');
+                    appendMessage(result.message);
+                    form.elements.message_text.value = '';
+                    status.textContent = '';
+                } catch (error) {
+                    status.textContent = error.message || 'Message could not be sent. Please try again.';
+                    status.className = 'small text-danger mt-2';
+                } finally {
+                    button.disabled = false;
+                }
+            });
+        }
+
+        const loadOlderButton = document.getElementById('load-older');
+        if (loadOlderButton) {
+            loadOlderButton.addEventListener('click', async () => {
+                const firstMessage = container.querySelector('[data-message-id]');
+                if (!firstMessage) return;
+                loadOlderButton.disabled = true;
+                try {
+                    const response = await fetch(`${container.dataset.historyUrl}?before=${firstMessage.dataset.messageId}`, {
+                        headers: {'Accept': 'application/json'}
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Older messages could not be loaded.');
+                    const previousHeight = container.scrollHeight;
+                    const fragment = document.createDocumentFragment();
+                    for (const message of result.messages) {
+                        if (!renderedIds.has(message.id)) {
+                            renderedIds.add(message.id);
+                            fragment.appendChild(createMessageRow(message));
+                        }
+                    }
+                    container.insertBefore(fragment, loadOlderButton.parentElement.nextSibling);
+                    container.scrollTop += container.scrollHeight - previousHeight;
+                    if (!result.has_more) loadOlderButton.remove();
+                } catch (error) {
+                    status.textContent = error.message || 'Older messages could not be loaded.';
+                    status.className = 'small text-danger mt-2';
+                } finally {
+                    if (loadOlderButton.isConnected) loadOlderButton.disabled = false;
+                }
+            });
+        }
+
+        container.scrollTop = container.scrollHeight;
+        timer = window.setTimeout(poll, 5000);
+        window.addEventListener('pagehide', () => window.clearTimeout(timer), {once: true});
+    })();
+</script>
+{% endif %}
+{% endblock %}

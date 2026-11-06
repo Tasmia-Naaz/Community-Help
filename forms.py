@@ -1,7 +1,7 @@
 from flask_wtf import FlaskForm
 from wtforms import (
     StringField, PasswordField, SelectField, TextAreaField,
-    FloatField, DateField, SubmitField
+    FloatField, DateField, SubmitField, FileField
 )
 from wtforms.validators import (
     DataRequired, Email, Length, EqualTo, ValidationError, NumberRange, Optional
@@ -51,6 +51,19 @@ class RegistrationForm(FlaskForm):
         ('volunteer', 'Volunteer (I want to help neighbors in need)'),
         ('donor', 'Resource Donor (I have supplies, food, or gear to share)')
     ], validators=[DataRequired(message="Please select your role.")])
+    id_document_type = SelectField('ID Document Type', choices=[
+        ('', 'Select document type'),
+        ('national_id', 'National ID'),
+        ('passport', 'Passport'),
+        ('drivers_license', "Driver's license"),
+        ('other', 'Other government-issued ID')
+    ], validators=[Optional()])
+    id_document = FileField('ID Document (PDF, JPG, JPEG, or PNG)')
+    volunteer_certificate = FileField('Volunteer Certificate (Optional)')
+    volunteering_experience = TextAreaField('Volunteering Experience (Optional)', validators=[
+        Optional(),
+        Length(max=2000, message="Experience must be 2000 characters or fewer.")
+    ])
     submit = SubmitField('Create Account')
 
     def validate_email(self, field):

@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 from flask import render_template, redirect, url_for, flash, request, g, abort
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from extensions import db
-from models import HelpRequest, StatusHistory, User
+from models import HelpRequest, StatusHistory, User, ResourceListing
 from forms import HelpRequestForm, StatusUpdateForm
 from decorators import login_required, role_required
 from helpers import (
@@ -21,14 +23,22 @@ def seeker_dashboard():
     if status_filter and status_filter in ['Pending', 'Accepted', 'In Progress', 'Completed', 'Cancelled']:
         query = query.filter_by(status=status_filter)
         
-    requests_list = query.order_by(HelpRequest.created_at.desc()).all()
+    requests_list = query.options(
+        joinedload(HelpRequest.assigned_volunteer)
+    ).order_by(HelpRequest.created_at.desc()).all()
 
-    # Calculate summary metrics
-    all_user_requests = HelpRequest.query.filter_by(seeker_id=g.current_user.id).all()
-    total_count = len(all_user_requests)
-    pending_count = sum(1 for r in all_user_requests if r.status == 'Pending')
-    active_count = sum(1 for r in all_user_requests if r.status in ['Accepted', 'In Progress'])
-    completed_count = sum(1 for r in all_user_requests if r.status == 'Completed')
+    request_counts = db.session.query(
+        HelpRequest.status,
+        func.count(HelpRequest.id)
+    ).filter_by(seeker_id=g.current_user.id).group_by(HelpRequest.status).all()
+    counts_by_status = dict(request_counts)
+    total_count = sum(counts_by_status.values())
+    pending_count = counts_by_status.get('Pending', 0)
+    active_count = counts_by_status.get('Accepted', 0) + counts_by_status.get('In Progress', 0)
+    completed_count = counts_by_status.get('Completed', 0)
+    available_resources = ResourceListing.query.filter_by(status='Available').filter(
+        ResourceListing.quantity > 0
+    ).order_by(ResourceListing.created_at.desc()).limit(6).all()
 
     return render_template(
         'help_seeker_dashboard.html',
@@ -37,6 +47,7 @@ def seeker_dashboard():
         pending_count=pending_count,
         active_count=active_count,
         completed_count=completed_count,
+        available_resources=available_resources,
         current_filter=status_filter
     )
 
