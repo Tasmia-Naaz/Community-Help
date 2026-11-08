@@ -1,7 +1,7 @@
 # Community Help Connect
 
 > **A Centralized Hyperlocal Peer-to-Peer Community Support & Emergency Coordination Web Application**  
-> *Developed with Python Flask, MySQL, Flask-SQLAlchemy, and Bootstrap 5 for academic evaluation  demonstration.*
+> *Developed with Python Flask, PostgreSQL, Flask-SQLAlchemy, and Bootstrap 5 for academic evaluation  demonstration.*
 
 ---
 
