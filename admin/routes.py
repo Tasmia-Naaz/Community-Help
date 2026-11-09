@@ -47,24 +47,40 @@ def dashboard():
             (User.email.ilike(f"%{user_search}%")) |
             (User.locality.ilike(f"%{user_search}%"))
         )
-    users_list = user_query.options(
+    users_page = user_query.options(
         joinedload(User.volunteer_verification)
-    ).order_by(User.created_at.desc()).limit(50).all()
+    ).order_by(User.created_at.desc()).paginate(
+        page=request.args.get('users_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
 
     # 3. Recent Requests
-    recent_requests = HelpRequest.query.options(
+    recent_requests_page = HelpRequest.query.options(
         joinedload(HelpRequest.seeker),
         joinedload(HelpRequest.assigned_volunteer)
-    ).order_by(HelpRequest.created_at.desc()).limit(30).all()
-    disputed_requests = HelpRequest.query.options(
+    ).order_by(HelpRequest.created_at.desc()).paginate(
+        page=request.args.get('requests_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
+    disputed_requests_page = HelpRequest.query.options(
         joinedload(HelpRequest.seeker),
         joinedload(HelpRequest.assigned_volunteer)
-    ).filter_by(status='disputed').order_by(HelpRequest.disputed_at.asc()).all()
+    ).filter_by(status='disputed').order_by(HelpRequest.disputed_at.asc()).paginate(
+        page=request.args.get('disputed_requests_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
 
     # 4. Recent Resources
-    recent_resources = ResourceListing.query.options(
+    recent_resources_page = ResourceListing.query.options(
         joinedload(ResourceListing.donor)
-    ).order_by(ResourceListing.created_at.desc()).limit(30).all()
+    ).order_by(ResourceListing.created_at.desc()).paginate(
+        page=request.args.get('resources_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
 
     # 5. Active Emergency & Event Logs
     active_emergency = get_active_emergency()
@@ -74,14 +90,18 @@ def dashboard():
     recent_history = StatusHistory.query.options(
         joinedload(StatusHistory.changed_by)
     ).order_by(StatusHistory.created_at.desc()).limit(20).all()
-    volunteer_verifications = VolunteerVerification.query.join(
+    volunteer_verifications_page = VolunteerVerification.query.join(
         User, User.id == VolunteerVerification.volunteer_id
     ).filter(
         User.role == 'volunteer'
     ).options(
         joinedload(VolunteerVerification.volunteer),
         selectinload(VolunteerVerification.history).joinedload(VolunteerVerificationHistory.actor)
-    ).order_by(VolunteerVerification.verification_submitted_at.desc()).limit(100).all()
+    ).order_by(VolunteerVerification.verification_submitted_at.desc()).paginate(
+        page=request.args.get('volunteer_verifications_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
 
     return render_template(
         'admin_dashboard.html',
@@ -92,14 +112,19 @@ def dashboard():
         completed_requests=completed_requests,
         total_resources=total_resources,
         active_resources=active_resources,
-        users=users_list,
-        requests=recent_requests,
-        disputed_requests=disputed_requests,
-        resources=recent_resources,
+        users=users_page.items,
+        users_page=users_page,
+        requests=recent_requests_page.items,
+        recent_requests_page=recent_requests_page,
+        disputed_requests=disputed_requests_page.items,
+        disputed_requests_page=disputed_requests_page,
+        resources=recent_resources_page.items,
+        recent_resources_page=recent_resources_page,
         active_emergency=active_emergency,
         past_emergencies=past_emergencies,
         recent_history=recent_history,
-        volunteer_verifications=volunteer_verifications,
+        volunteer_verifications=volunteer_verifications_page.items,
+        volunteer_verifications_page=volunteer_verifications_page,
         user_search=user_search
     )
 

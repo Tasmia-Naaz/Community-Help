@@ -41,7 +41,7 @@
         <div class="col-md-4">
             <div class="stat-card stat-urgent shadow-sm">
                 <div class="text-danger small fw-semibold text-uppercase">Open Community Requests</div>
-                <div class="stat-value text-danger">{{ open_requests | length }}</div>
+                <div class="stat-value text-danger">{{ open_requests_count }}</div>
                 <div class="small text-muted mt-1">Awaiting a helpful neighbor</div>
             </div>
         </div>
@@ -53,7 +53,7 @@
             <h5 class="fw-bold mb-0 text-dark">
                 <i class="bi bi-check2-circle me-2 text-success"></i>My Accepted Tasks
             </h5>
-            <span class="badge bg-secondary">{{ assigned_tasks | length }} Assigned</span>
+            <span class="badge bg-secondary">{{ assigned_tasks_page.total }} Assigned</span>
         </div>
         <div class="card-body p-0">
             {% if assigned_tasks %}
@@ -163,6 +163,21 @@
                 You haven't accepted any community tasks yet. Check the open requests below to help someone today!
             </div>
             {% endif %}
+            {% if assigned_tasks_page and assigned_tasks_page.pages > 1 %}
+            <nav class="d-flex justify-content-between align-items-center p-3" aria-label="Assigned task pages">
+                {% if assigned_tasks_page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('volunteers.volunteer_dashboard', assigned_tasks_page=assigned_tasks_page.prev_num, category=selected_category, locality=selected_locality, resource_category=selected_resource_category, resource_locality=selected_resource_locality) }}">Previous</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                {% endif %}
+                <span class="small text-secondary">Page {{ assigned_tasks_page.page }} of {{ assigned_tasks_page.pages }}</span>
+                {% if assigned_tasks_page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('volunteers.volunteer_dashboard', assigned_tasks_page=assigned_tasks_page.next_num, category=selected_category, locality=selected_locality, resource_category=selected_resource_category, resource_locality=selected_resource_locality) }}">Next</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                {% endif %}
+            </nav>
+            {% endif %}
         </div>
     </div>
 
@@ -239,6 +254,21 @@
                 <p class="text-muted small mb-0">No in-stock resources match these filters right now.</p>
             </div>
             {% endif %}
+            {% if available_resources_page and available_resources_page.pages > 1 %}
+            <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Available resource pages">
+                {% if available_resources_page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('volunteers.volunteer_dashboard', available_resources_page=available_resources_page.prev_num, category=selected_category, locality=selected_locality, resource_category=selected_resource_category, resource_locality=selected_resource_locality) }}">Previous</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                {% endif %}
+                <span class="small text-secondary">Page {{ available_resources_page.page }} of {{ available_resources_page.pages }}</span>
+                {% if available_resources_page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('volunteers.volunteer_dashboard', available_resources_page=available_resources_page.next_num, category=selected_category, locality=selected_locality, resource_category=selected_resource_category, resource_locality=selected_resource_locality) }}">Next</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                {% endif %}
+            </nav>
+            {% endif %}
         </div>
     </div>
 
@@ -288,6 +318,21 @@
             </div>
             {% else %}
             <div class="p-4 text-center text-muted">You have not requested any donor resources yet.</div>
+            {% endif %}
+            {% if resource_requests_page and resource_requests_page.pages > 1 %}
+            <nav class="d-flex justify-content-between align-items-center p-3" aria-label="Resource request pages">
+                {% if resource_requests_page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('volunteers.volunteer_dashboard', resource_requests_page=resource_requests_page.prev_num, category=selected_category, locality=selected_locality, resource_category=selected_resource_category, resource_locality=selected_resource_locality) }}">Previous</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                {% endif %}
+                <span class="small text-secondary">Page {{ resource_requests_page.page }} of {{ resource_requests_page.pages }}</span>
+                {% if resource_requests_page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('volunteers.volunteer_dashboard', resource_requests_page=resource_requests_page.next_num, category=selected_category, locality=selected_locality, resource_category=selected_resource_category, resource_locality=selected_resource_locality) }}">Next</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                {% endif %}
+            </nav>
             {% endif %}
         </div>
     </div>
@@ -395,6 +440,21 @@
                     All current community requests have been accepted by volunteers or none match your filter. Check back soon!
                 </p>
             </div>
+            {% endif %}
+            {% if open_requests_page and open_requests_page.pages > 1 %}
+            <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Open request pages">
+                {% if open_requests_page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('volunteers.volunteer_dashboard', open_requests_page=open_requests_page.prev_num, category=selected_category, locality=selected_locality, resource_category=selected_resource_category, resource_locality=selected_resource_locality) }}">Previous</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                {% endif %}
+                <span class="small text-secondary">Page {{ open_requests_page.page }} of {{ open_requests_page.pages }}</span>
+                {% if open_requests_page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('volunteers.volunteer_dashboard', open_requests_page=open_requests_page.next_num, category=selected_category, locality=selected_locality, resource_category=selected_resource_category, resource_locality=selected_resource_locality) }}">Next</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                {% endif %}
+            </nav>
             {% endif %}
         </div>
     </div>

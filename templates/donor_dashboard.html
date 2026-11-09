@@ -63,7 +63,7 @@
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-inboxes me-2 text-warning"></i>Pending Item Requests</h5>
-            <span class="badge bg-warning text-dark">{{ pending_resource_requests|length }} Pending</span>
+            <span class="badge bg-warning text-dark">{{ pending_resource_requests_count }} Pending</span>
         </div>
         <div class="card-body p-0">
             {% if pending_resource_requests %}
@@ -135,6 +135,21 @@
             </div>
         </div>
     </div>
+    {% endif %}
+    {% if resource_requests_page and resource_requests_page.pages > 1 %}
+    <nav class="d-flex justify-content-between align-items-center mb-4" aria-label="Resource request pages">
+        {% if resource_requests_page.has_prev %}
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('donations.donor_dashboard', resource_requests_page=resource_requests_page.prev_num, status=current_filter) }}">Previous</a>
+        {% else %}
+        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+        {% endif %}
+        <span class="small text-secondary">Page {{ resource_requests_page.page }} of {{ resource_requests_page.pages }}</span>
+        {% if resource_requests_page.has_next %}
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('donations.donor_dashboard', resource_requests_page=resource_requests_page.next_num, status=current_filter) }}">Next</a>
+        {% else %}
+        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+        {% endif %}
+    </nav>
     {% endif %}
 
     <!-- Listings Table Card -->
@@ -248,6 +263,21 @@
                     <i class="bi bi-plus-circle me-1"></i> Share a Resource
                 </a>
             </div>
+            {% endif %}
+            {% if listings_page and listings_page.pages > 1 %}
+            <nav class="d-flex justify-content-between align-items-center p-3" aria-label="Resource listing pages">
+                {% if listings_page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('donations.donor_dashboard', listings_page=listings_page.prev_num, status=current_filter) }}">Previous</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                {% endif %}
+                <span class="small text-secondary">Page {{ listings_page.page }} of {{ listings_page.pages }}</span>
+                {% if listings_page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('donations.donor_dashboard', listings_page=listings_page.next_num, status=current_filter) }}">Next</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                {% endif %}
+            </nav>
             {% endif %}
         </div>
     </div>

@@ -87,6 +87,21 @@
                 </div>
                 {% endfor %}
             </div>
+            {% if pending_confirmations_page and pending_confirmations_page.pages > 1 %}
+            <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Pending confirmation pages">
+                {% if pending_confirmations_page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('help_requests.seeker_dashboard', pending_confirmations_page=pending_confirmations_page.prev_num, requests_page=requests_page.page, status=current_filter) }}">Previous</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                {% endif %}
+                <span class="small text-secondary">Page {{ pending_confirmations_page.page }} of {{ pending_confirmations_page.pages }}</span>
+                {% if pending_confirmations_page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('help_requests.seeker_dashboard', pending_confirmations_page=pending_confirmations_page.next_num, requests_page=requests_page.page, status=current_filter) }}">Next</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                {% endif %}
+            </nav>
+            {% endif %}
         </div>
     </section>
     {% endif %}
@@ -257,6 +272,21 @@
                     </tbody>
                 </table>
             </div>
+            {% if requests_page and requests_page.pages > 1 %}
+            <nav class="d-flex justify-content-between align-items-center p-3" aria-label="Help request pages">
+                {% if requests_page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('help_requests.seeker_dashboard', requests_page=requests_page.prev_num, status=current_filter) }}">Previous</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                {% endif %}
+                <span class="small text-secondary">Page {{ requests_page.page }} of {{ requests_page.pages }}</span>
+                {% if requests_page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('help_requests.seeker_dashboard', requests_page=requests_page.next_num, status=current_filter) }}">Next</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                {% endif %}
+            </nav>
+            {% endif %}
             {% else %}
             <!-- Empty State -->
             <div class="empty-state">

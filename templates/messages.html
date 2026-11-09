@@ -136,7 +136,14 @@
         const status = document.getElementById('chat-status');
         const renderedIds = new Set(Array.from(container.querySelectorAll('[data-message-id]'), item => Number(item.dataset.messageId)));
         let lastId = Math.max(0, ...renderedIds);
-        let timer;
+        let timer = null;
+        let polling = false;
+
+        function schedulePoll() {
+            if (!document.hidden && timer === null && !polling) {
+                timer = window.setTimeout(poll, 5000);
+            }
+        }
 
         function createMessageRow(message) {
             const row = document.createElement('div');
@@ -167,10 +174,11 @@
         }
 
         async function poll() {
+            timer = null;
             if (document.hidden) {
-                timer = window.setTimeout(poll, 5000);
                 return;
             }
+            polling = true;
             try {
                 const response = await fetch(`${container.dataset.pollUrl}?after=${lastId}`, {headers: {'Accept': 'application/json'}});
                 if (!response.ok) {
@@ -187,7 +195,8 @@
                 status.textContent = error.message || 'New messages could not be refreshed.';
                 status.className = 'small text-danger mt-2';
             } finally {
-                timer = window.setTimeout(poll, 5000);
+                polling = false;
+                schedulePoll();
             }
         }
 
@@ -253,8 +262,19 @@
         }
 
         container.scrollTop = container.scrollHeight;
-        timer = window.setTimeout(poll, 5000);
-        window.addEventListener('pagehide', () => window.clearTimeout(timer), {once: true});
+        schedulePoll();
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                window.clearTimeout(timer);
+                timer = null;
+            } else {
+                schedulePoll();
+            }
+        });
+        window.addEventListener('pagehide', () => {
+            window.clearTimeout(timer);
+            timer = null;
+        }, {once: true});
     })();
 </script>
 {% endif %}

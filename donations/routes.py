@@ -1,12 +1,15 @@
 from datetime import datetime, timezone
 from flask import render_template, redirect, url_for, flash, request, g, abort
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.orm import joinedload
 from extensions import db
 from models import ResourceListing, ResourceRequest, StatusHistory, User, Conversation
 from forms import ResourceListingForm, StatusUpdateForm
 from decorators import login_required, role_required
-from helpers import record_status_change, validate_resource_transition, broadcast_to_volunteers, create_notification
+from helpers import (
+    record_status_change, validate_resource_transition, broadcast_to_volunteers,
+    create_notification, withdraw_expired_resources
+)
 from . import donations_bp
 
 
@@ -20,52 +23,52 @@ def donor_dashboard():
     user = g.current_user
     status_filter = request.args.get('status', '').strip()
 
-    listings = ResourceListing.query.filter_by(donor_id=user.id).order_by(ResourceListing.created_at.desc()).all()
-    resource_requests = ResourceRequest.query.options(
+    if withdraw_expired_resources(donor_id=user.id):
+        db.session.commit()
+
+    resource_counts = dict(db.session.query(
+        ResourceListing.status,
+        func.count(ResourceListing.id)
+    ).filter_by(donor_id=user.id).group_by(ResourceListing.status).all())
+    total_resources = sum(resource_counts.values())
+
+    listings_query = ResourceListing.query.filter_by(donor_id=user.id)
+    if status_filter in ['Available', 'Reserved', 'Collected', 'Distributed', 'Withdrawn']:
+        listings_query = listings_query.filter_by(status=status_filter)
+    listings_page = listings_query.order_by(
+        ResourceListing.created_at.desc()
+    ).paginate(
+        page=request.args.get('listings_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
+    resource_requests_page = ResourceRequest.query.options(
         joinedload(ResourceRequest.resource),
         joinedload(ResourceRequest.volunteer)
     ).join(ResourceListing).filter(
         ResourceListing.donor_id == user.id
-    ).order_by(ResourceRequest.created_at.desc()).all()
+    ).order_by(ResourceRequest.created_at.desc()).paginate(
+        page=request.args.get('resource_requests_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
+    pending_resource_requests_count = ResourceRequest.query.join(ResourceListing).filter(
+        ResourceListing.donor_id == user.id,
+        ResourceRequest.status == 'Pending'
+    ).count()
     conversation_count = Conversation.query.filter_by(donor_id=user.id).count()
-
-    # Automatically audit and mark expired listings as Withdrawn
-    has_expired_changes = False
-    for res in listings:
-        if res.auto_check_expiry():
-            record_status_change(
-                entity_type='ResourceListing',
-                entity_id=res.id,
-                previous_status='Available',
-                new_status='Withdrawn',
-                changed_by_id=user.id,
-                notes='Automatically marked Withdrawn due to passed expiry/deadline date.'
-            )
-            has_expired_changes = True
-
-    if has_expired_changes:
-        db.session.commit()
-
-    # Apply filter if selected
-    if status_filter and status_filter in ['Available', 'Reserved', 'Collected', 'Distributed', 'Withdrawn']:
-        display_listings = [r for r in listings if r.status == status_filter]
-    else:
-        display_listings = listings
-
-    # Compute metrics
-    total_resources = len(listings)
-    available_count = sum(1 for r in listings if r.status == 'Available')
-    distributed_count = sum(1 for r in listings if r.status == 'Distributed')
-    reserved_count = sum(1 for r in listings if r.status == 'Reserved')
 
     return render_template(
         'donor_dashboard.html',
-        listings=display_listings,
+        listings=listings_page.items,
+        listings_page=listings_page,
         total_resources=total_resources,
-        available_count=available_count,
-        distributed_count=distributed_count,
-        reserved_count=reserved_count,
-        resource_requests=resource_requests,
+        available_count=resource_counts.get('Available', 0),
+        distributed_count=resource_counts.get('Distributed', 0),
+        reserved_count=resource_counts.get('Reserved', 0),
+        resource_requests=resource_requests_page.items,
+        resource_requests_page=resource_requests_page,
+        pending_resource_requests_count=pending_resource_requests_count,
         conversation_count=conversation_count,
         current_filter=status_filter
     )

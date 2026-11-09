@@ -98,7 +98,7 @@
             <h5 class="fw-bold mb-0 text-danger" id="disputed-requests-heading">
                 <i class="bi bi-exclamation-triangle me-2"></i>Disputed Requests
             </h5>
-            <span class="badge bg-danger">{{ disputed_requests|length }} awaiting review</span>
+            <span class="badge bg-danger">{{ disputed_requests_page.total }} awaiting review</span>
         </div>
         <div class="card-body">
             {% if disputed_requests %}
@@ -137,6 +137,21 @@
             </div>
             {% else %}
             <p class="text-secondary mb-0">There are no disputed requests requiring review.</p>
+            {% endif %}
+            {% if disputed_requests_page and disputed_requests_page.pages > 1 %}
+            <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Disputed request pages">
+                {% if disputed_requests_page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', disputed_requests_page=disputed_requests_page.prev_num) }}">Previous</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                {% endif %}
+                <span class="small text-secondary">Page {{ disputed_requests_page.page }} of {{ disputed_requests_page.pages }}</span>
+                {% if disputed_requests_page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', disputed_requests_page=disputed_requests_page.next_num) }}">Next</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                {% endif %}
+            </nav>
             {% endif %}
         </div>
     </section>
@@ -251,6 +266,21 @@
                     {% else %}
                     <div class="p-4 text-center text-muted">No volunteer verification applications are available.</div>
                     {% endif %}
+                    {% if volunteer_verifications_page and volunteer_verifications_page.pages > 1 %}
+                    <nav class="d-flex justify-content-between align-items-center p-3" aria-label="Volunteer verification pages">
+                        {% if volunteer_verifications_page.has_prev %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', volunteer_verifications_page=volunteer_verifications_page.prev_num, user_search=user_search) }}">Previous</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                        {% endif %}
+                        <span class="small text-secondary">Page {{ volunteer_verifications_page.page }} of {{ volunteer_verifications_page.pages }}</span>
+                        {% if volunteer_verifications_page.has_next %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', volunteer_verifications_page=volunteer_verifications_page.next_num, user_search=user_search) }}">Next</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                        {% endif %}
+                    </nav>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -335,6 +365,21 @@
                             </tbody>
                         </table>
                     </div>
+                    {% if users_page and users_page.pages > 1 %}
+                    <nav class="d-flex justify-content-between align-items-center p-3" aria-label="User account pages">
+                        {% if users_page.has_prev %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', users_page=users_page.prev_num, user_search=user_search) }}">Previous</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                        {% endif %}
+                        <span class="small text-secondary">Page {{ users_page.page }} of {{ users_page.pages }}</span>
+                        {% if users_page.has_next %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', users_page=users_page.next_num, user_search=user_search) }}">Next</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                        {% endif %}
+                    </nav>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -398,6 +443,21 @@
                             </tbody>
                         </table>
                     </div>
+                    {% if recent_requests_page and recent_requests_page.pages > 1 %}
+                    <nav class="d-flex justify-content-between align-items-center p-3" aria-label="Recent request pages">
+                        {% if recent_requests_page.has_prev %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', requests_page=recent_requests_page.prev_num, resources_page=recent_resources_page.page, user_search=user_search, users_page=users_page.page, volunteer_verifications_page=volunteer_verifications_page.page, disputed_requests_page=disputed_requests_page.page) }}">Previous</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                        {% endif %}
+                        <span class="small text-secondary">Page {{ recent_requests_page.page }} of {{ recent_requests_page.pages }}</span>
+                        {% if recent_requests_page.has_next %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', requests_page=recent_requests_page.next_num, resources_page=recent_resources_page.page, user_search=user_search, users_page=users_page.page, volunteer_verifications_page=volunteer_verifications_page.page, disputed_requests_page=disputed_requests_page.page) }}">Next</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                        {% endif %}
+                    </nav>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -445,6 +505,21 @@
                             </tbody>
                         </table>
                     </div>
+                    {% if recent_resources_page and recent_resources_page.pages > 1 %}
+                    <nav class="d-flex justify-content-between align-items-center p-3" aria-label="Recent resource pages">
+                        {% if recent_resources_page.has_prev %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', resources_page=recent_resources_page.prev_num, requests_page=recent_requests_page.page, user_search=user_search, users_page=users_page.page, volunteer_verifications_page=volunteer_verifications_page.page, disputed_requests_page=disputed_requests_page.page) }}">Previous</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                        {% endif %}
+                        <span class="small text-secondary">Page {{ recent_resources_page.page }} of {{ recent_resources_page.pages }}</span>
+                        {% if recent_resources_page.has_next %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.dashboard', resources_page=recent_resources_page.next_num, requests_page=recent_requests_page.page, user_search=user_search, users_page=users_page.page, volunteer_verifications_page=volunteer_verifications_page.page, disputed_requests_page=disputed_requests_page.page) }}">Next</a>
+                        {% else %}
+                        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                        {% endif %}
+                    </nav>
+                    {% endif %}
                 </div>
             </div>
         </div>

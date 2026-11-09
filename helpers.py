@@ -1,7 +1,11 @@
 from datetime import datetime, timezone, timedelta
 from flask import g, request
+from sqlalchemy import or_
 from extensions import db
-from models import Notification, StatusHistory, EmergencyEvent, HelpRequest, User, VolunteerVerification
+from models import (
+    Notification, StatusHistory, EmergencyEvent, HelpRequest, ResourceListing,
+    User, VolunteerVerification
+)
 
 # In-memory dictionary for login rate limiting: {ip_or_email: [timestamp1, timestamp2, ...]}
 _login_attempts = {}
@@ -93,6 +97,39 @@ def record_status_change(entity_type, entity_id, previous_status, new_status, ch
     )
     db.session.add(history)
     return history
+
+
+def withdraw_expired_resources(donor_id=None, category=None, locality=None):
+    """Withdraw expired available listings and record their status changes."""
+    now = datetime.now(timezone.utc)
+    query = ResourceListing.query.filter_by(status='Available').filter(
+        or_(
+            ResourceListing.expiry_date < now,
+            ResourceListing.available_until < now
+        )
+    )
+    if donor_id is not None:
+        query = query.filter_by(donor_id=donor_id)
+    if category:
+        query = query.filter(ResourceListing.category == category)
+    if locality:
+        query = query.filter(ResourceListing.locality.ilike(f'%{locality}%'))
+
+    expired = query.with_for_update().all()
+    changed = 0
+    for resource in expired:
+        if not resource.auto_check_expiry():
+            continue
+        record_status_change(
+            entity_type='ResourceListing',
+            entity_id=resource.id,
+            previous_status='Available',
+            new_status='Withdrawn',
+            changed_by_id=resource.donor_id,
+            notes='Automatically marked Withdrawn after resource availability expired.'
+        )
+        changed += 1
+    return changed
 
 
 def get_active_emergency():

@@ -51,6 +51,21 @@
                 <p class="text-muted small mb-0">You're all caught up! New updates will appear here.</p>
             </div>
             {% endif %}
+            {% if notifications_page and notifications_page.pages > 1 %}
+            <nav class="d-flex justify-content-between align-items-center p-3" aria-label="Notification pages">
+                {% if notifications_page.has_prev %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for(request.endpoint, notifications_page=notifications_page.prev_num) }}">Previous</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+                {% endif %}
+                <span class="small text-secondary">Page {{ notifications_page.page }} of {{ notifications_page.pages }}</span>
+                {% if notifications_page.has_next %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for(request.endpoint, notifications_page=notifications_page.next_num) }}">Next</a>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+                {% endif %}
+            </nav>
+            {% endif %}
         </div>
     </div>
 </div>

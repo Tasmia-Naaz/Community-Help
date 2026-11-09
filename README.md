@@ -290,6 +290,20 @@ python migrate_community_features.py
 
 The script creates only the new feature tables and preserves existing application tables/data. Supabase's storage bucket and policies are provisioned by `supabase_migration.sql`; the migration SQL is also the exact schema/policy reference for those features.
 
+### Performance notes and safe index update
+
+The help-seeker, volunteer, donor, and administrator dashboards now page large collections (20 records per page), notification views update unread rows in one statement, and dashboard counters use database aggregates. Chat polling pauses while its browser tab is hidden. Gunicorn is configured for one worker with two threads and a 60-second timeout; SQLAlchemy uses a two-connection pool per worker with no overflow, so connection usage stays bounded on small Render instances. Static files are configured for one-hour browser caching.
+
+For an existing Supabase database, optionally add the supporting indexes in [`performance_indexes.sql`](./performance_indexes.sql) from **Supabase Dashboard → SQL Editor**. The script only creates indexes with `IF NOT EXISTS`; it does not change or delete application records, accounts, or tables, and is safe to rerun. Run it during a quieter period because PostgreSQL index creation can briefly affect writes on large tables. No other database migration is needed for these performance changes.
+
+Run a local rendering benchmark with:
+
+```powershell
+.\venv\Scripts\python.exe scripts\benchmark_routes.py
+```
+
+It reports mean, median, and maximum timings for the homepage and all four dashboards using synthetic users and an in-memory SQLite test database. It never uses `.env`, Supabase, or real user records; these figures measure local Flask/template overhead only, not Render, network, or production database latency. For production latency, measure each route in the browser's Network panel while signed in as the corresponding role and inspect Render request logs alongside Supabase query performance.
+
 ### Help Seeker completion confirmation
 
 Volunteer completion now moves a request to `awaiting_confirmation`. The assigned Help Seeker can confirm it (final status `Completed`, with an optional 1–5 star rating and feedback) or report an issue (status `disputed`). Administrators can review disputed requests and either verify completion or reopen the request for volunteers. Notifications and status-history audit entries are created for these transitions.
@@ -327,6 +341,8 @@ The tests cover the task-confirmation and dispute workflow as well as mandatory 
 The root `.gitignore` excludes local secrets (`.env` and `.flaskenv`), virtual environments, SQLite/instance data, caches, logs, and build artifacts. Keep application source, templates, static assets, migrations, and tests in Git; they are not deployment clutter. Existing local files are not deleted by these ignore rules.
 
 Before deploying, review `git status --short` and ensure `.env`, database files, and credentials are not staged. Configure `SECRET_KEY`, `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET` as environment variables in the hosting provider. Apply `supabase_migration.sql` to the intended Supabase project. Do not run `seed.py --demo` or deploy with demo credentials. Use the production configuration (`FLASK_ENV=production`) and your host's supported WSGI server and start command; the exact command depends on the hosting provider.
+
+For these performance updates, first review the Render service's available memory and current database connection usage. The included `Procfile` uses one Gunicorn worker/two threads, and the database pool is capped at two connections per worker. Deploy the code normally through GitHub/Render, then (optionally) run `performance_indexes.sql` in the matching Supabase project during a low-traffic period. No reset, account changes, or table migration is required. After deployment, check Render logs for worker restarts/timeouts and compare signed-in dashboard requests before and after the release; do not share database URLs or service-role keys when collecting diagnostics.
 
 This repository includes a `Procfile` and `wsgi.py` for Procfile-compatible platforms. Install production dependencies from `requirements.txt`; the host starts the app with Gunicorn. The WSGI entry point explicitly loads the production configuration and requires `SECRET_KEY`. Set the database and Supabase Storage variables in the host's secret/environment settings, and use the provided platform's PostgreSQL connection URI. Do not put production secrets in the repository or run demo seed commands against production.
 

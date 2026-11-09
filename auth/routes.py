@@ -332,16 +332,27 @@ def logout():
 @login_required
 def notifications():
     """Display in-app notifications for the current user."""
-    user_notifications = Notification.query.filter_by(user_id=g.current_user.id)\
-        .order_by(Notification.created_at.desc()).all()
-    
-    # Mark all unread as read upon viewing
-    for n in user_notifications:
-        if not n.is_read:
-            n.is_read = True
+    Notification.query.filter_by(
+        user_id=g.current_user.id,
+        is_read=False
+    ).update(
+        {Notification.is_read: True},
+        synchronize_session=False
+    )
     db.session.commit()
 
-    return render_template('notifications.html', notifications=user_notifications)
+    notifications_page = Notification.query.filter_by(
+        user_id=g.current_user.id
+    ).order_by(Notification.created_at.desc()).paginate(
+        page=request.args.get('notifications_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
+    return render_template(
+        'notifications.html',
+        notifications=notifications_page.items,
+        notifications_page=notifications_page
+    )
 
 
 @auth_bp.route('/notifications/read/<int:notif_id>', methods=['POST'])

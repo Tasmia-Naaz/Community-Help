@@ -273,6 +273,7 @@ def send_message(conversation_id):
         message_text=text,
         created_at=now
     )
+    message.sender = user
     conversation.updated_at = now
     db.session.add(message)
     resource_name = (
@@ -285,10 +286,11 @@ def send_message(conversation_id):
         message=f'New message about {resource_name}.',
         link=url_for('messaging.inbox', conversation=conversation.id)
     )
+    db.session.flush()
+    serialized_message = _serialize_message(message, user.id)
     db.session.commit()
     if wants_json:
-        message = Message.query.options(joinedload(Message.sender)).filter_by(id=message.id).one()
-        return jsonify({'message': _serialize_message(message, user.id)}), 201
+        return jsonify({'message': serialized_message}), 201
     return redirect(url_for('messaging.inbox', conversation=conversation.id))
 
 

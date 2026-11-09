@@ -72,6 +72,8 @@ class Config:
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_recycle': 280,
         'pool_pre_ping': True,
+        'pool_size': 2,
+        'max_overflow': 0,
         'connect_args': connect_args
     }
     if not (
@@ -79,6 +81,8 @@ class Config:
         and ':memory:' in str(SQLALCHEMY_DATABASE_URI)
     ):
         SQLALCHEMY_ENGINE_OPTIONS['pool_timeout'] = 5
+
+    SEND_FILE_MAX_AGE_DEFAULT = 3600
 
 
 class DevelopmentConfig(Config):

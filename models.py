@@ -121,6 +121,10 @@ class User(db.Model):
 class HelpRequest(db.Model):
     """Help Request model for community members seeking assistance."""
     __tablename__ = 'help_requests'
+    __table_args__ = (
+        db.Index('ix_help_requests_seeker_created', 'seeker_id', 'created_at'),
+        db.Index('ix_help_requests_volunteer_updated', 'assigned_volunteer_id', 'updated_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     seeker_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -168,6 +172,10 @@ class HelpRequest(db.Model):
 class ResourceListing(db.Model):
     """Resource Listing model for donated supplies, meals, kits, and equipment."""
     __tablename__ = 'resource_listings'
+    __table_args__ = (
+        db.Index('ix_resource_listings_donor_created', 'donor_id', 'created_at'),
+        db.Index('ix_resource_listings_status_created', 'status', 'created_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     donor_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -213,6 +221,9 @@ class ResourceListing(db.Model):
 class ResourceRequest(db.Model):
     """Volunteer request for a quantity from an existing donor resource listing."""
     __tablename__ = 'resource_requests'
+    __table_args__ = (
+        db.Index('ix_resource_requests_volunteer_updated', 'volunteer_id', 'updated_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     resource_id = db.Column(db.Integer, db.ForeignKey('resource_listings.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -231,6 +242,9 @@ class ResourceRequest(db.Model):
 class Notification(db.Model):
     """In-app notifications for users, volunteers, and administrators."""
     __tablename__ = 'notifications'
+    __table_args__ = (
+        db.Index('ix_notifications_user_created', 'user_id', 'created_at'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)

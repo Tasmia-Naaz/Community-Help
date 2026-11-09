@@ -26,15 +26,23 @@ def seeker_dashboard():
     ]:
         query = query.filter_by(status=status_filter)
         
-    requests_list = query.options(
+    requests_page = query.options(
         joinedload(HelpRequest.assigned_volunteer)
-    ).order_by(HelpRequest.created_at.desc()).all()
-    pending_confirmations = HelpRequest.query.options(
+    ).order_by(HelpRequest.created_at.desc()).paginate(
+        page=request.args.get('requests_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
+    pending_confirmations_page = HelpRequest.query.options(
         joinedload(HelpRequest.assigned_volunteer)
     ).filter_by(
         seeker_id=g.current_user.id,
         status='awaiting_confirmation'
-    ).order_by(HelpRequest.volunteer_completed_at.desc()).all()
+    ).order_by(HelpRequest.volunteer_completed_at.desc()).paginate(
+        page=request.args.get('pending_confirmations_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
 
     request_counts = db.session.query(
         HelpRequest.status,
@@ -51,8 +59,10 @@ def seeker_dashboard():
 
     return render_template(
         'help_seeker_dashboard.html',
-        requests=requests_list,
-        pending_confirmations=pending_confirmations,
+        requests=requests_page.items,
+        requests_page=requests_page,
+        pending_confirmations=pending_confirmations_page.items,
+        pending_confirmations_page=pending_confirmations_page,
         total_count=total_count,
         pending_count=pending_count,
         active_count=active_count,

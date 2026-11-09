@@ -1,17 +1,34 @@
 from datetime import datetime, timezone
 import math
+from types import SimpleNamespace
 from flask import render_template, redirect, url_for, flash, request, g, abort
-from sqlalchemy import update
-from sqlalchemy.orm import joinedload
+from sqlalchemy import func, update
+from sqlalchemy.orm import joinedload, load_only
 from extensions import db
 from models import HelpRequest, ResourceListing, ResourceRequest, StatusHistory, User
 from forms import StatusUpdateForm
 from decorators import role_required
 from helpers import (
     calculate_matching_score, record_status_change, 
-    create_notification, validate_request_transition, get_active_emergency
+    create_notification, validate_request_transition, get_active_emergency,
+    withdraw_expired_resources
 )
 from . import volunteers_bp
+
+
+def _list_pagination(items, page, per_page, total):
+    pages = math.ceil(total / per_page) if total else 0
+    return SimpleNamespace(
+        items=items,
+        page=page,
+        per_page=per_page,
+        total=total,
+        pages=pages,
+        has_prev=page > 1,
+        prev_num=page - 1,
+        has_next=page < pages,
+        next_num=page + 1
+    )
 
 
 @volunteers_bp.route('/dashboard')
@@ -37,24 +54,64 @@ def volunteer_dashboard():
     if locality_filter:
         open_query = open_query.filter(HelpRequest.locality.ilike(f"%{locality_filter}%"))
         
-    all_open_requests = open_query.all()
+    matching_candidates = open_query.options(load_only(
+        HelpRequest.id,
+        HelpRequest.urgency,
+        HelpRequest.locality,
+        HelpRequest.created_at
+    )).all()
 
     # Apply transparent Rule-Based Matching Algorithm
     # Prioritizes by urgency, locality match, emergency status, and request age
     scored_requests = []
-    for req in all_open_requests:
+    for req in matching_candidates:
         score = calculate_matching_score(req, user.locality, active_emergency)
         scored_requests.append((score, req))
 
     # Sort descending by calculated matching score
     scored_requests.sort(key=lambda x: x[0], reverse=True)
-    open_requests = [item[1] for item in scored_requests]
+    open_requests_total = len(scored_requests)
+    open_requests_page_number = max(
+        1, request.args.get('open_requests_page', 1, type=int) or 1
+    )
+    page_size = 20
+    first_open_request = (open_requests_page_number - 1) * page_size
+    open_request_ids = [
+        item[1].id
+        for item in scored_requests[first_open_request:first_open_request + page_size]
+    ]
+    if open_request_ids:
+        page_requests = HelpRequest.query.options(
+            joinedload(HelpRequest.seeker)
+        ).filter(HelpRequest.id.in_(open_request_ids)).all()
+        requests_by_id = {req.id: req for req in page_requests}
+        open_requests = [
+            requests_by_id[request_id]
+            for request_id in open_request_ids
+            if request_id in requests_by_id
+        ]
+    else:
+        open_requests = []
+    open_requests_page = _list_pagination(
+        open_requests,
+        open_requests_page_number,
+        page_size,
+        open_requests_total
+    )
 
     # Volunteer's assigned tasks
-    assigned_tasks = HelpRequest.query.options(
+    assigned_tasks_page = HelpRequest.query.options(
         joinedload(HelpRequest.seeker)
     ).filter_by(assigned_volunteer_id=user.id)\
-        .order_by(HelpRequest.updated_at.desc()).all()
+        .order_by(HelpRequest.updated_at.desc()).paginate(
+            page=request.args.get('assigned_tasks_page', 1, type=int) or 1,
+            per_page=20,
+            error_out=False
+        )
+    task_counts = dict(db.session.query(
+        HelpRequest.status,
+        func.count(HelpRequest.id)
+    ).filter_by(assigned_volunteer_id=user.id).group_by(HelpRequest.status).all())
 
     resource_query = ResourceListing.query.filter(
         ResourceListing.status == 'Available',
@@ -65,43 +122,50 @@ def volunteer_dashboard():
     if resource_locality_filter:
         resource_query = resource_query.filter(ResourceListing.locality.ilike(f"%{resource_locality_filter}%"))
 
-    available_resources = resource_query.order_by(ResourceListing.created_at.desc()).all()
-    expired_resources = [resource for resource in available_resources if resource.auto_check_expiry()]
-    if expired_resources:
-        for resource in expired_resources:
-            record_status_change(
-                entity_type='ResourceListing',
-                entity_id=resource.id,
-                previous_status='Available',
-                new_status='Withdrawn',
-                changed_by_id=resource.donor_id,
-                notes='Automatically marked Withdrawn after resource availability expired.'
-            )
+    if withdraw_expired_resources(
+        category=resource_category_filter,
+        locality=resource_locality_filter
+    ):
         db.session.commit()
-        available_resources = [resource for resource in available_resources if resource.status == 'Available']
+    available_resources_page = resource_query.order_by(
+        ResourceListing.created_at.desc()
+    ).paginate(
+        page=request.args.get('available_resources_page', 1, type=int) or 1,
+        per_page=20,
+        error_out=False
+    )
 
     resource_categories = [row[0] for row in db.session.query(ResourceListing.category).distinct().order_by(ResourceListing.category).all()]
-    resource_requests = ResourceRequest.query.options(
+    resource_requests_page = ResourceRequest.query.options(
         joinedload(ResourceRequest.resource)
     ).filter_by(volunteer_id=user.id)\
-        .order_by(ResourceRequest.updated_at.desc()).all()
+        .order_by(ResourceRequest.updated_at.desc()).paginate(
+            page=request.args.get('resource_requests_page', 1, type=int) or 1,
+            per_page=20,
+            error_out=False
+        )
 
     # Metrics
-    pending_tasks_count = sum(1 for t in assigned_tasks if t.status in ['Accepted', 'In Progress'])
-    completed_tasks_count = sum(1 for t in assigned_tasks if t.status == 'Completed')
+    pending_tasks_count = task_counts.get('Accepted', 0) + task_counts.get('In Progress', 0)
+    completed_tasks_count = task_counts.get('Completed', 0)
 
     return render_template(
         'volunteer_dashboard.html',
         open_requests=open_requests,
-        assigned_tasks=assigned_tasks,
+        open_requests_page=open_requests_page,
+        open_requests_count=open_requests_total,
+        assigned_tasks=assigned_tasks_page.items,
+        assigned_tasks_page=assigned_tasks_page,
         pending_tasks_count=pending_tasks_count,
         completed_tasks_count=completed_tasks_count,
         active_emergency=active_emergency,
         selected_category=category_filter,
         selected_locality=locality_filter,
-        available_resources=available_resources,
+        available_resources=available_resources_page.items,
+        available_resources_page=available_resources_page,
         resource_categories=resource_categories,
-        resource_requests=resource_requests,
+        resource_requests=resource_requests_page.items,
+        resource_requests_page=resource_requests_page,
         selected_resource_category=resource_category_filter,
         selected_resource_locality=resource_locality_filter
     )
