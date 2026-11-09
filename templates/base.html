@@ -15,10 +15,13 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <!-- Custom Application CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Empty favicon: stops browsers requesting /favicon.ico -->
+    <link rel="icon" href="data:,">
     {% block extra_head %}{% endblock %}
 </head>
 
 <body class="d-flex flex-column min-vh-100 bg-light">
+    {% set ep = request.endpoint or '' %}
 
     <!-- Emergency Broadcast Banner (Active when Admin activates Emergency Mode) -->
     {% if active_emergency and active_emergency.is_active %}
@@ -66,19 +69,19 @@
                 <!-- Left Nav Links -->
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}"
+                        <a class="nav-link {% if ep == 'index' %}active{% endif %}"
                             href="{{ url_for('index') }}">
                             <i class="bi bi-house-door me-1"></i> Home
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'services' %}active{% endif %}"
+                        <a class="nav-link {% if ep == 'services' %}active{% endif %}"
                             href="{{ url_for('services') }}">
                             <i class="bi bi-grid me-1"></i> Services
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'how_it_works' %}active{% endif %}"
+                        <a class="nav-link {% if ep == 'how_it_works' %}active{% endif %}"
                             href="{{ url_for('how_it_works') }}">
                             <i class="bi bi-info-circle me-1"></i> How It Works
                         </a>
@@ -88,7 +91,7 @@
                     {% if current_user %}
                     {% if current_user.is_help_seeker %}
                     <li class="nav-item">
-                        <a class="nav-link {% if 'help_requests' in request.endpoint %}active{% endif %}"
+                        <a class="nav-link {% if 'help_requests' in ep %}active{% endif %}"
                             href="{{ url_for('help_requests.seeker_dashboard') }}">
                             <i class="bi bi-speedometer2 me-1"></i> My Dashboard
                         </a>
@@ -107,12 +110,12 @@
                     {% elif current_user.is_volunteer %}
                     <li class="nav-item">
                         {% if current_user.volunteer_verification and current_user.volunteer_verification.verification_status == 'approved' %}
-                        <a class="nav-link {% if 'volunteers' in request.endpoint %}active{% endif %}"
+                        <a class="nav-link {% if 'volunteers' in ep %}active{% endif %}"
                             href="{{ url_for('volunteers.volunteer_dashboard') }}">
                             <i class="bi bi-people-fill me-1"></i> Volunteer Hub
                         </a>
                         {% else %}
-                        <a class="nav-link {% if request.endpoint == 'auth.volunteer_verification_status' %}active{% endif %}" href="{{ url_for('auth.volunteer_verification_status') }}">
+                        <a class="nav-link {% if ep == 'auth.volunteer_verification_status' %}active{% endif %}" href="{{ url_for('auth.volunteer_verification_status') }}">
                             <i class="bi bi-shield-check me-1"></i> Verification Status
                         </a>
                         {% endif %}
@@ -127,7 +130,7 @@
                     {% endif %}
                     {% elif current_user.is_donor %}
                     <li class="nav-item">
-                        <a class="nav-link {% if 'donations' in request.endpoint %}active{% endif %}"
+                        <a class="nav-link {% if 'donations' in ep %}active{% endif %}"
                             href="{{ url_for('donations.donor_dashboard') }}">
                             <i class="bi bi-box2-heart me-1"></i> Donor Hub
                         </a>
@@ -145,7 +148,7 @@
                     </li>
                     {% elif current_user.is_admin %}
                     <li class="nav-item">
-                        <a class="nav-link {% if 'admin' in request.endpoint %}active{% endif %}"
+                        <a class="nav-link {% if 'admin' in ep %}active{% endif %}"
                             href="{{ url_for('admin.dashboard') }}">
                             <i class="bi bi-shield-lock-fill me-1"></i> Admin Portal
                         </a>

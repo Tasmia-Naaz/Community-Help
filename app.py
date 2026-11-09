@@ -78,7 +78,7 @@ def create_app(config_name=None):
             'active_emergency': active_emergency,
             'unread_notifications_count': unread_notifications_count,
             'unread_message_count': unread_message_count,
-            'current_user': g.current_user,
+            'current_user': getattr(g, 'current_user', None),
             'SERVICE_CATEGORIES': SERVICE_CATEGORIES
         }
 
