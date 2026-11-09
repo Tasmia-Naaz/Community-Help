@@ -97,8 +97,14 @@
                                     <span class="badge badge-status badge-status-accepted">Accepted</span>
                                 {% elif task.status == 'In Progress' %}
                                     <span class="badge badge-status badge-status-inprogress">In Progress</span>
+                                {% elif task.status == 'awaiting_confirmation' %}
+                                    <span class="badge bg-warning text-dark">Awaiting Help Seeker Confirmation</span>
+                                {% elif task.status == 'disputed' %}
+                                    <span class="badge bg-danger">Disputed – Admin Review</span>
                                 {% elif task.status == 'Completed' %}
-                                    <span class="badge badge-status badge-status-completed">Completed</span>
+                                    <span class="badge badge-status badge-status-completed">
+                                        {% if task.confirmed_by_id %}Confirmed Completed{% else %}Completed by Admin{% endif %}
+                                    </span>
                                 {% else %}
                                     <span class="badge bg-secondary">{{ task.status }}</span>
                                 {% endif %}
@@ -121,16 +127,23 @@
                                     </button>
                                 </form>
                                 {% elif task.status == 'In Progress' %}
-                                <form method="POST" action="{{ url_for('volunteers.update_task_status', request_id=task.id) }}" class="d-inline" data-confirm="Confirm that you have finished this task?">
+                                <form method="POST" action="{{ url_for('volunteers.update_task_status', request_id=task.id) }}" class="d-flex flex-wrap gap-2">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="new_status" value="Completed">
+                                    <input type="hidden" name="new_status" value="awaiting_confirmation">
+                                    <label class="visually-hidden" for="task-completion-note-{{ task.id }}">Completion note (optional)</label>
+                                    <input id="task-completion-note-{{ task.id }}" class="form-control form-control-sm" name="completion_note" maxlength="2000" placeholder="Completion note (optional)">
                                     <button type="submit" class="btn btn-sm btn-success">
                                         <i class="bi bi-check-lg me-1"></i> Mark Completed
                                     </button>
                                 </form>
+                                {% elif task.status == 'awaiting_confirmation' %}
+                                <span class="text-warning-emphasis small fw-semibold">Awaiting Help Seeker Confirmation</span>
+                                {% elif task.status == 'disputed' %}
+                                <span class="text-danger small fw-semibold">Disputed – Admin Review</span>
                                 {% elif task.status == 'Completed' %}
                                 <span class="text-success small fw-semibold">
-                                    <i class="bi bi-check-all me-1"></i> Task Finished
+                                    <i class="bi bi-check-all me-1"></i>
+                                    {% if task.confirmed_by_id %}Confirmed Completed{% else %}Completed by Admin{% endif %}
                                 </span>
                                 {% endif %}
                             </td>

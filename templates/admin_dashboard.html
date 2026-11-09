@@ -93,6 +93,54 @@
         </div>
     </div>
 
+    <section class="card shadow-sm border-danger mb-4" aria-labelledby="disputed-requests-heading">
+        <div class="card-header bg-danger bg-opacity-10 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h5 class="fw-bold mb-0 text-danger" id="disputed-requests-heading">
+                <i class="bi bi-exclamation-triangle me-2"></i>Disputed Requests
+            </h5>
+            <span class="badge bg-danger">{{ disputed_requests|length }} awaiting review</span>
+        </div>
+        <div class="card-body">
+            {% if disputed_requests %}
+            <div class="row g-3">
+                {% for r in disputed_requests %}
+                <div class="col-12">
+                    <article class="border rounded-3 p-3">
+                        <div class="d-flex flex-wrap justify-content-between gap-2">
+                            <div>
+                                <a class="fw-bold text-dark" href="{{ url_for('help_requests.view_request', request_id=r.id) }}">#{{ r.id }} — {{ r.title }}</a>
+                                <div class="small text-secondary">
+                                    Help Seeker: {{ r.seeker.full_name }} · Volunteer: {{ r.assigned_volunteer.full_name if r.assigned_volunteer else 'Unassigned' }}
+                                </div>
+                            </div>
+                            <small class="text-secondary">Reported {{ r.disputed_at.strftime('%d %b %Y, %H:%M') if r.disputed_at else 'date unavailable' }}</small>
+                        </div>
+                        <p class="mb-2 mt-2"><strong>Help Seeker's reason:</strong> {{ r.dispute_reason }}</p>
+                        {% if r.completion_note %}<p class="small text-secondary mb-2"><strong>Volunteer completion note:</strong> {{ r.completion_note }}</p>{% endif %}
+                        <div class="d-flex flex-column flex-md-row gap-2">
+                            <form method="POST" action="{{ url_for('admin.resolve_request_dispute', request_id=r.id) }}" class="d-flex flex-column flex-sm-row flex-grow-1 gap-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="action" value="completed">
+                                <label class="visually-hidden" for="resolve-note-{{ r.id }}">Resolution note</label>
+                                <input id="resolve-note-{{ r.id }}" class="form-control" name="resolution_note" maxlength="2000" placeholder="Resolution note (optional)">
+                                <button type="submit" class="btn btn-success text-nowrap">Verify &amp; Mark Completed</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('admin.resolve_request_dispute', request_id=r.id) }}" class="d-flex flex-column flex-sm-row gap-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="action" value="reopen">
+                                <button type="submit" class="btn btn-outline-primary text-nowrap">Reopen for Assistance</button>
+                            </form>
+                        </div>
+                    </article>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-secondary mb-0">There are no disputed requests requiring review.</p>
+            {% endif %}
+        </div>
+    </section>
+
     <!-- Tabs Navigation for Management -->
     <ul class="nav nav-pills mb-4" id="adminTabs" role="tablist">
         <li class="nav-item" role="presentation">
@@ -329,7 +377,15 @@
                                     <td><small>{{ r.seeker.full_name }}</small></td>
                                     <td><small>{{ r.locality }}</small></td>
                                     <td>
+                                        {% if r.status == 'awaiting_confirmation' %}
+                                        <span class="badge bg-warning text-dark">Awaiting Help Seeker Confirmation</span>
+                                        {% elif r.status == 'disputed' %}
+                                        <span class="badge bg-danger">Disputed – Admin Review</span>
+                                        {% elif r.status == 'Completed' and r.confirmed_by_id %}
+                                        <span class="badge bg-success">Confirmed Completed</span>
+                                        {% else %}
                                         <span class="badge badge-status badge-status-{{ r.status.lower().replace(' ', '') }}">{{ r.status }}</span>
+                                        {% endif %}
                                     </td>
                                     <td><small>{{ r.assigned_volunteer.full_name if r.assigned_volunteer else 'Unassigned' }}</small></td>
                                     <td class="text-end pe-3">

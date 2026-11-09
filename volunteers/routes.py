@@ -287,6 +287,52 @@ def update_task_status(request_id):
     new_status = request.form.get('new_status', '').strip()
     notes = request.form.get('notes', '').strip()
 
+    if new_status == 'Completed':
+        flash("Tasks must be confirmed by the Help Seeker before they can be completed.", "warning")
+        return redirect(url_for('help_requests.view_request', request_id=req.id))
+
+    if new_status == 'awaiting_confirmation':
+        completion_note = request.form.get('completion_note', '').strip()
+        if not user.is_volunteer or not is_assignee:
+            flash("Only the assigned volunteer can submit a task for confirmation.", "danger")
+            return redirect(url_for('help_requests.view_request', request_id=req.id))
+        if len(completion_note) > 2000:
+            flash("Completion notes must be 2,000 characters or fewer.", "danger")
+            return redirect(url_for('help_requests.view_request', request_id=req.id))
+
+        completed_at = datetime.now(timezone.utc)
+        changed = HelpRequest.query.filter_by(
+            id=req.id,
+            status='In Progress',
+            assigned_volunteer_id=user.id
+        ).update({
+            HelpRequest.status: 'awaiting_confirmation',
+            HelpRequest.volunteer_completed_at: completed_at,
+            HelpRequest.completion_note: completion_note or None
+        }, synchronize_session=False)
+        if changed != 1:
+            db.session.rollback()
+            flash("This task has already changed and cannot be submitted again.", "warning")
+            return redirect(url_for('help_requests.view_request', request_id=req.id))
+
+        record_status_change(
+            entity_type='HelpRequest',
+            entity_id=req.id,
+            previous_status='In Progress',
+            new_status='awaiting_confirmation',
+            changed_by_id=user.id,
+            notes=completion_note or 'Volunteer reported the task complete.'
+        )
+        create_notification(
+            user_id=req.seeker_id,
+            title="Please Confirm Your Help Request",
+            message=f"{user.full_name} marked '{req.title}' as completed. Please confirm whether you received the help.",
+            link=url_for('help_requests.view_request', request_id=req.id)
+        )
+        db.session.commit()
+        flash("The task is awaiting Help Seeker confirmation.", "success")
+        return redirect(url_for('help_requests.view_request', request_id=req.id))
+
     is_valid, reason = validate_request_transition(
         current_status=req.status,
         new_status=new_status,
@@ -308,8 +354,6 @@ def update_task_status(request_id):
         notify_msg = f"{user.full_name} had to release your task '{req.title}' back to the community pool for other volunteers."
     elif new_status == 'In Progress':
         notify_msg = f"{user.full_name} has started working on your request '{req.title}'."
-    elif new_status == 'Completed':
-        notify_msg = f"{user.full_name} has marked your request '{req.title}' as COMPLETED. Please verify!"
     else:
         notify_msg = f"Task '{req.title}' status changed to {new_status}."
 

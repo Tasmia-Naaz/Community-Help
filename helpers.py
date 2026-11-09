@@ -129,7 +129,7 @@ def validate_request_transition(current_status, new_status, user_role, is_owner=
     if is_assignee:
         if current_status == 'Accepted' and new_status == 'In Progress':
             return True, "Volunteer started task"
-        if current_status == 'In Progress' and new_status == 'Completed':
+        if current_status == 'In Progress' and new_status == 'awaiting_confirmation':
             return True, "Volunteer marked task as completed"
         if current_status in ['Accepted', 'In Progress'] and new_status == 'Pending':
             return True, "Volunteer released task back to community"

@@ -56,6 +56,10 @@ def dashboard():
         joinedload(HelpRequest.seeker),
         joinedload(HelpRequest.assigned_volunteer)
     ).order_by(HelpRequest.created_at.desc()).limit(30).all()
+    disputed_requests = HelpRequest.query.options(
+        joinedload(HelpRequest.seeker),
+        joinedload(HelpRequest.assigned_volunteer)
+    ).filter_by(status='disputed').order_by(HelpRequest.disputed_at.asc()).all()
 
     # 4. Recent Resources
     recent_resources = ResourceListing.query.options(
@@ -90,6 +94,7 @@ def dashboard():
         active_resources=active_resources,
         users=users_list,
         requests=recent_requests,
+        disputed_requests=disputed_requests,
         resources=recent_resources,
         active_emergency=active_emergency,
         past_emergencies=past_emergencies,
@@ -97,6 +102,70 @@ def dashboard():
         volunteer_verifications=volunteer_verifications,
         user_search=user_search
     )
+
+
+@admin_bp.route('/requests/<int:request_id>/resolve-dispute', methods=['POST'])
+@admin_required
+def resolve_request_dispute(request_id):
+    help_req = HelpRequest.query.get_or_404(request_id)
+    action = request.form.get('action', '').strip()
+    if action not in {'completed', 'reopen'}:
+        flash("Choose whether to mark the request completed or reopen it.", "danger")
+        return redirect(url_for('admin.dashboard'))
+
+    new_status = 'Completed' if action == 'completed' else 'Pending'
+    updated_values = {HelpRequest.status: new_status}
+    if action == 'reopen':
+        updated_values[HelpRequest.assigned_volunteer_id] = None
+
+    changed = HelpRequest.query.filter_by(
+        id=help_req.id,
+        status='disputed'
+    ).update(updated_values, synchronize_session=False)
+    if changed != 1:
+        db.session.rollback()
+        flash("This dispute has already been resolved or is no longer available.", "warning")
+        return redirect(url_for('admin.dashboard'))
+
+    resolution_note = request.form.get('resolution_note', '').strip()
+    if len(resolution_note) > 2000:
+        db.session.rollback()
+        flash("Resolution notes must be 2,000 characters or fewer.", "danger")
+        return redirect(url_for('admin.dashboard'))
+
+    record_status_change(
+        entity_type='HelpRequest',
+        entity_id=help_req.id,
+        previous_status='disputed',
+        new_status=new_status,
+        changed_by_id=g.current_user.id,
+        notes=resolution_note or (
+            'Administrator verified completion.' if action == 'completed'
+            else 'Administrator reopened the request for further assistance.'
+        )
+    )
+    resolution_message = (
+        f"An administrator verified that '{help_req.title}' was completed."
+        if action == 'completed'
+        else f"An administrator reopened '{help_req.title}' for further assistance. It is available to volunteers again."
+    )
+    create_notification(
+        user_id=help_req.seeker_id,
+        title="Administrator Reviewed Your Dispute",
+        message=resolution_message,
+        link=url_for('help_requests.view_request', request_id=help_req.id)
+    )
+    if help_req.assigned_volunteer_id:
+        create_notification(
+            user_id=help_req.assigned_volunteer_id,
+            title="Administrator Reviewed the Disputed Task",
+            message=resolution_message,
+            link=url_for('help_requests.view_request', request_id=help_req.id)
+        )
+
+    db.session.commit()
+    flash("The disputed request has been resolved.", "success")
+    return redirect(url_for('admin.dashboard'))
 
 
 @admin_bp.route('/conversation-reports')

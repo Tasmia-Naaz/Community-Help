@@ -17,7 +17,10 @@ SERVICE_CATEGORIES = [
 URGENCY_LEVELS = ['Normal', 'Urgent', 'Critical']
 
 # Request Statuses
-REQUEST_STATUSES = ['Pending', 'Accepted', 'In Progress', 'Completed', 'Cancelled']
+REQUEST_STATUSES = [
+    'Pending', 'Accepted', 'In Progress', 'awaiting_confirmation',
+    'disputed', 'Completed', 'Cancelled'
+]
 
 # Resource Statuses
 RESOURCE_STATUSES = ['Available', 'Reserved', 'Collected', 'Distributed', 'Withdrawn']
@@ -130,6 +133,14 @@ class HelpRequest(db.Model):
     contact_preference = db.Column(db.String(30), nullable=False, default='share_on_accept')
     status = db.Column(db.String(30), nullable=False, default='Pending', index=True)
     assigned_volunteer_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    volunteer_completed_at = db.Column(db.DateTime, nullable=True)
+    completion_note = db.Column(db.Text, nullable=True)
+    seeker_confirmed_at = db.Column(db.DateTime, nullable=True)
+    confirmed_by_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    dispute_reason = db.Column(db.Text, nullable=True)
+    disputed_at = db.Column(db.DateTime, nullable=True)
+    rating = db.Column(db.Integer, nullable=True)
+    feedback = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

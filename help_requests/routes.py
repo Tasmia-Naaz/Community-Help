@@ -20,12 +20,21 @@ def seeker_dashboard():
     status_filter = request.args.get('status', '').strip()
     
     query = HelpRequest.query.filter_by(seeker_id=g.current_user.id)
-    if status_filter and status_filter in ['Pending', 'Accepted', 'In Progress', 'Completed', 'Cancelled']:
+    if status_filter and status_filter in [
+        'Pending', 'Accepted', 'In Progress', 'awaiting_confirmation',
+        'disputed', 'Completed', 'Cancelled'
+    ]:
         query = query.filter_by(status=status_filter)
         
     requests_list = query.options(
         joinedload(HelpRequest.assigned_volunteer)
     ).order_by(HelpRequest.created_at.desc()).all()
+    pending_confirmations = HelpRequest.query.options(
+        joinedload(HelpRequest.assigned_volunteer)
+    ).filter_by(
+        seeker_id=g.current_user.id,
+        status='awaiting_confirmation'
+    ).order_by(HelpRequest.volunteer_completed_at.desc()).all()
 
     request_counts = db.session.query(
         HelpRequest.status,
@@ -43,6 +52,7 @@ def seeker_dashboard():
     return render_template(
         'help_seeker_dashboard.html',
         requests=requests_list,
+        pending_confirmations=pending_confirmations,
         total_count=total_count,
         pending_count=pending_count,
         active_count=active_count,
@@ -50,6 +60,145 @@ def seeker_dashboard():
         available_resources=available_resources,
         current_filter=status_filter
     )
+
+
+@help_requests_bp.route('/<int:request_id>/confirm-completion', methods=['POST'])
+@role_required('help_seeker')
+def confirm_completion(request_id):
+    help_req = HelpRequest.query.get_or_404(request_id)
+    user = g.current_user
+    if help_req.seeker_id != user.id:
+        abort(403)
+
+    confirmed_at = datetime.now(timezone.utc)
+    changed = HelpRequest.query.filter_by(
+        id=help_req.id,
+        seeker_id=user.id,
+        status='awaiting_confirmation'
+    ).update({
+        HelpRequest.status: 'Completed',
+        HelpRequest.seeker_confirmed_at: confirmed_at,
+        HelpRequest.confirmed_by_id: user.id
+    }, synchronize_session=False)
+    if changed != 1:
+        db.session.rollback()
+        flash("This request is no longer awaiting confirmation.", "warning")
+        return redirect(url_for('help_requests.seeker_dashboard'))
+
+    record_status_change(
+        entity_type='HelpRequest',
+        entity_id=help_req.id,
+        previous_status='awaiting_confirmation',
+        new_status='Completed',
+        changed_by_id=user.id,
+        notes='Help Seeker confirmed that assistance was received.'
+    )
+    if help_req.assigned_volunteer_id:
+        create_notification(
+            user_id=help_req.assigned_volunteer_id,
+            title="Help Seeker Confirmed Completion",
+            message=f"{user.full_name} confirmed that help was received for '{help_req.title}'. You may now receive a rating.",
+            link=url_for('help_requests.view_request', request_id=help_req.id)
+        )
+
+    db.session.commit()
+    flash("Thank you for confirming that you received the help. You can now rate your volunteer.", "success")
+    return redirect(url_for('help_requests.seeker_dashboard'))
+
+
+@help_requests_bp.route('/<int:request_id>/dispute-completion', methods=['POST'])
+@role_required('help_seeker')
+def dispute_completion(request_id):
+    help_req = HelpRequest.query.get_or_404(request_id)
+    user = g.current_user
+    if help_req.seeker_id != user.id:
+        abort(403)
+
+    reason = request.form.get('reason', '').strip()
+    if not reason or len(reason) > 2000:
+        flash("Enter a reason of 1–2,000 characters so the administrator can review the issue.", "danger")
+        return redirect(url_for('help_requests.seeker_dashboard'))
+
+    disputed_at = datetime.now(timezone.utc)
+    changed = HelpRequest.query.filter_by(
+        id=help_req.id,
+        seeker_id=user.id,
+        status='awaiting_confirmation'
+    ).update({
+        HelpRequest.status: 'disputed',
+        HelpRequest.dispute_reason: reason,
+        HelpRequest.disputed_at: disputed_at
+    }, synchronize_session=False)
+    if changed != 1:
+        db.session.rollback()
+        flash("This request is no longer awaiting confirmation.", "warning")
+        return redirect(url_for('help_requests.seeker_dashboard'))
+
+    record_status_change(
+        entity_type='HelpRequest',
+        entity_id=help_req.id,
+        previous_status='awaiting_confirmation',
+        new_status='disputed',
+        changed_by_id=user.id,
+        notes=reason
+    )
+    dispute_link = url_for('help_requests.view_request', request_id=help_req.id)
+    if help_req.assigned_volunteer_id:
+        create_notification(
+            user_id=help_req.assigned_volunteer_id,
+            title="Help Seeker Reported an Issue",
+            message=f"{user.full_name} reported an issue with '{help_req.title}'. An administrator will review it.",
+            link=dispute_link
+        )
+    for administrator in User.query.filter_by(role='admin', is_suspended=False).all():
+        create_notification(
+            user_id=administrator.id,
+            title="Help Request Needs Review",
+            message=f"{user.full_name} disputed completion of '{help_req.title}': {reason}",
+            link=url_for('admin.dashboard')
+        )
+
+    db.session.commit()
+    flash("Your report has been sent to an administrator for review.", "info")
+    return redirect(url_for('help_requests.seeker_dashboard'))
+
+
+@help_requests_bp.route('/<int:request_id>/feedback', methods=['POST'])
+@role_required('help_seeker')
+def submit_completion_feedback(request_id):
+    help_req = HelpRequest.query.get_or_404(request_id)
+    user = g.current_user
+    if help_req.seeker_id != user.id:
+        abort(403)
+
+    raw_rating = request.form.get('rating', '').strip()
+    feedback = request.form.get('feedback', '').strip()
+    try:
+        rating = int(raw_rating)
+    except (TypeError, ValueError):
+        rating = 0
+    if rating not in range(1, 6) or len(feedback) > 2000:
+        flash("Choose a rating from 1 to 5 and keep feedback to 2,000 characters or fewer.", "danger")
+        return redirect(url_for('help_requests.seeker_dashboard'))
+
+    changed = HelpRequest.query.filter_by(
+        id=help_req.id,
+        seeker_id=user.id,
+        status='Completed',
+        confirmed_by_id=user.id,
+        rating=None
+    ).update({
+        HelpRequest.rating: rating,
+        HelpRequest.feedback: feedback or None
+    }, synchronize_session=False)
+    if changed != 1:
+        db.session.rollback()
+        flash("Feedback can only be submitted once after you confirm a completed request.", "warning")
+        return redirect(url_for('help_requests.seeker_dashboard'))
+
+    db.session.commit()
+    flash("Thank you for rating your volunteer and sharing your feedback.", "success")
+    return redirect(url_for('help_requests.seeker_dashboard'))
 
 
 @help_requests_bp.route('/new', methods=['GET', 'POST'])

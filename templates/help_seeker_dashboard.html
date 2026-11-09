@@ -49,6 +49,48 @@
         </div>
     </div>
 
+    {% if pending_confirmations %}
+    <section class="card shadow-sm border-warning mb-4" aria-labelledby="pending-confirmation-heading">
+        <div class="card-header bg-warning bg-opacity-10 py-3">
+            <h5 class="fw-bold mb-0" id="pending-confirmation-heading">
+                <i class="bi bi-hourglass-split me-2 text-warning"></i>Pending Confirmation
+                <span class="badge bg-warning text-dark ms-1">{{ pending_confirmations|length }}</span>
+            </h5>
+            <div class="small text-secondary mt-1">Please confirm only after checking whether you received the requested assistance.</div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                {% for req in pending_confirmations %}
+                <div class="col-12">
+                    <article class="border rounded-3 p-3">
+                        <div class="d-flex flex-wrap justify-content-between gap-2">
+                            <div>
+                                <a href="{{ url_for('help_requests.view_request', request_id=req.id) }}" class="fw-bold text-dark">{{ req.title }}</a>
+                                <div class="small text-secondary">Volunteer: {{ req.assigned_volunteer.full_name if req.assigned_volunteer else 'Volunteer unavailable' }}</div>
+                            </div>
+                            <small class="text-secondary">Marked completed: {{ req.volunteer_completed_at.strftime('%d %b %Y, %H:%M') if req.volunteer_completed_at else 'N/A' }}</small>
+                        </div>
+                        {% if req.completion_note %}<p class="small bg-light rounded p-2 mt-2 mb-3">{{ req.completion_note }}</p>{% endif %}
+                        <div class="d-flex flex-column flex-md-row gap-2">
+                            <form method="POST" action="{{ url_for('help_requests.confirm_completion', request_id=req.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-success">Yes, I received the help</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('help_requests.dispute_completion', request_id=req.id) }}" class="d-flex flex-column flex-sm-row flex-grow-1 gap-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="visually-hidden" for="dispute-reason-{{ req.id }}">Reason the task is not completed</label>
+                                <input id="dispute-reason-{{ req.id }}" class="form-control" name="reason" maxlength="2000" required placeholder="Explain what is still needed">
+                                <button type="submit" class="btn btn-outline-danger text-nowrap">No, the task is not completed</button>
+                            </form>
+                        </div>
+                    </article>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h5 class="fw-bold mb-0"><i class="bi bi-chat-dots me-2 text-primary"></i>Messages / Contact Donors</h5>
@@ -99,6 +141,8 @@
                     <a href="{{ url_for('help_requests.seeker_dashboard') }}" class="btn btn-outline-secondary {% if not current_filter %}active{% endif %}">All</a>
                     <a href="{{ url_for('help_requests.seeker_dashboard', status='Pending') }}" class="btn btn-outline-warning text-dark {% if current_filter == 'Pending' %}active{% endif %}">Pending</a>
                     <a href="{{ url_for('help_requests.seeker_dashboard', status='In Progress') }}" class="btn btn-outline-primary {% if current_filter == 'In Progress' %}active{% endif %}">In Progress</a>
+                    <a href="{{ url_for('help_requests.seeker_dashboard', status='awaiting_confirmation') }}" class="btn btn-outline-warning {% if current_filter == 'awaiting_confirmation' %}active{% endif %}">Pending Confirmation</a>
+                    <a href="{{ url_for('help_requests.seeker_dashboard', status='disputed') }}" class="btn btn-outline-danger {% if current_filter == 'disputed' %}active{% endif %}">Disputed</a>
                     <a href="{{ url_for('help_requests.seeker_dashboard', status='Completed') }}" class="btn btn-outline-success {% if current_filter == 'Completed' %}active{% endif %}">Completed</a>
                     <a href="{{ url_for('help_requests.seeker_dashboard', status='Cancelled') }}" class="btn btn-outline-danger {% if current_filter == 'Cancelled' %}active{% endif %}">Cancelled</a>
                 </div>
@@ -154,8 +198,14 @@
                                     <span class="badge badge-status badge-status-accepted">Accepted</span>
                                 {% elif req.status == 'In Progress' %}
                                     <span class="badge badge-status badge-status-inprogress">In Progress</span>
+                                {% elif req.status == 'awaiting_confirmation' %}
+                                    <span class="badge bg-warning text-dark">Pending Confirmation</span>
+                                {% elif req.status == 'disputed' %}
+                                    <span class="badge bg-danger">Disputed – Admin Review</span>
                                 {% elif req.status == 'Completed' %}
-                                    <span class="badge badge-status badge-status-completed">Completed</span>
+                                    <span class="badge badge-status badge-status-completed">
+                                        {% if req.confirmed_by_id %}Confirmed Completed{% else %}Completed by Admin{% endif %}
+                                    </span>
                                 {% elif req.status == 'Cancelled' %}
                                     <span class="badge badge-status badge-status-cancelled">Cancelled</span>
                                 {% endif %}
@@ -186,6 +236,21 @@
                                     </form>
                                     {% endif %}
                                 </div>
+                                {% if req.status == 'Completed' and req.confirmed_by_id == current_user.id and not req.rating %}
+                                <form method="POST" action="{{ url_for('help_requests.submit_completion_feedback', request_id=req.id) }}" class="mt-2 text-start">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <label class="form-label small fw-semibold" for="rating-{{ req.id }}">Rate your volunteer</label>
+                                    <select class="form-select form-select-sm mb-2" id="rating-{{ req.id }}" name="rating" required>
+                                        <option value="">Choose 1–5 stars</option>
+                                        {% for stars in range(1, 6) %}<option value="{{ stars }}">{{ stars }} star{% if stars != 1 %}s{% endif %}</option>{% endfor %}
+                                    </select>
+                                    <label class="form-label small" for="feedback-{{ req.id }}">Feedback (optional)</label>
+                                    <textarea class="form-control form-control-sm mb-2" id="feedback-{{ req.id }}" name="feedback" maxlength="2000" rows="2"></textarea>
+                                    <button type="submit" class="btn btn-sm btn-primary">Submit Rating</button>
+                                </form>
+                                {% elif req.rating %}
+                                <div class="small text-success mt-2">Your rating: {{ req.rating }}/5{% if req.feedback %} — {{ req.feedback }}{% endif %}</div>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}

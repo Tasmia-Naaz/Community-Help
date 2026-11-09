@@ -290,6 +290,20 @@ python migrate_community_features.py
 
 The script creates only the new feature tables and preserves existing application tables/data. Supabase's storage bucket and policies are provisioned by `supabase_migration.sql`; the migration SQL is also the exact schema/policy reference for those features.
 
+### Help Seeker completion confirmation
+
+Volunteer completion now moves a request to `awaiting_confirmation`. The assigned Help Seeker can confirm it (final status `Completed`, with an optional 1–5 star rating and feedback) or report an issue (status `disputed`). Administrators can review disputed requests and either verify completion or reopen the request for volunteers. Notifications and status-history audit entries are created for these transitions.
+
+Before deploying this feature against an existing database, run the additive migration once against the same `DATABASE_URL` used by the app:
+
+```powershell
+python migrate_help_seeker_confirmation.py
+```
+
+The script adds only missing nullable columns to `help_requests`; it does not delete or rewrite existing requests. Run it from a deployment shell with the production database environment variables configured, or run it locally with a secure production `DATABASE_URL`. Do not add credentials to the command line or commit them. For a new database, the fields are included in the SQLAlchemy model and are created by the application's normal schema initialization.
+
+On Render, configure the production environment variables, run `python migrate_help_seeker_confirmation.py` from the service's Shell before deploying the new application version, then deploy/restart the service. Confirm the migration output and inspect the Volunteer, Help Seeker, and Admin dashboards. The script is idempotent and can safely be run again.
+
 The bucket must remain private. The SQL migration restricts direct authenticated object operations to a volunteer's own `volunteer/<community_user_id>/...` folder and allows admins to read. For direct Supabase Auth access, populate trusted `app_metadata` claims (`role` and `community_user_id`) from a trusted server; never accept those claims from `user_metadata`. The current Flask app uses its authenticated session and the service-role Storage API server-side, with route-level volunteer/admin checks and 60-second signed preview links. The service key bypasses Storage RLS, so do not add an unauthenticated upload endpoint or expose the key.
 
 ### Help Seeker–Donor and Volunteer–Donor conversations
@@ -306,7 +320,7 @@ Run the automated feature and regression tests:
 
 For a fresh development environment, install test dependencies with `pip install -r requirements-dev.txt`.
 
-The focused tests cover mandatory document uploads and pending status, pending/suspended route denial, admin approval and audit history, secure preview authorization, private message exchange/read receipts, and unrelated-user/volunteer conversation denial. Supabase Storage itself requires a configured project for an end-to-end live upload/preview test; unit tests mock that external service.
+The tests cover the task-confirmation and dispute workflow as well as mandatory document uploads, pending/suspended route denial, admin approval and audit history, secure preview authorization, private message exchange/read receipts, and unrelated-user/volunteer conversation denial. Supabase Storage itself requires a configured project for an end-to-end live upload/preview test; unit tests mock that external service.
 
 ### Preparing the repository for deployment
 

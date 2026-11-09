@@ -89,7 +89,7 @@ def test_duplicate_acceptance_prevention(client, app):
 
 
 def test_status_lifecycle_progression(client, app):
-    """Test valid lifecycle transitions: Accepted -> In Progress -> Completed."""
+    """Test valid lifecycle transitions through Help Seeker confirmation."""
     with app.app_context():
         seeker = create_user(role='help_seeker', email='seeker3@example.com')
         volunteer = create_user(role='volunteer', email='vol3@example.com')
@@ -118,11 +118,17 @@ def test_status_lifecycle_progression(client, app):
     with app.app_context():
         assert HelpRequest.query.get(req_id).status == 'In Progress'
 
-    # Transition to Completed
-    resp = client.post(f'/volunteers/update-status/{req_id}', data={'new_status': 'Completed'}, follow_redirects=True)
+    # Volunteer reports completion; the request remains pending seeker confirmation.
+    resp = client.post(f'/volunteers/update-status/{req_id}', data={
+        'new_status': 'awaiting_confirmation',
+        'completion_note': 'Delivered the supplies.'
+    }, follow_redirects=True)
     assert resp.status_code == 200
     with app.app_context():
-        assert HelpRequest.query.get(req_id).status == 'Completed'
+        req = HelpRequest.query.get(req_id)
+        assert req.status == 'awaiting_confirmation'
+        assert req.completion_note == 'Delivered the supplies.'
+        assert req.volunteer_completed_at is not None
 
 
 def test_rule_based_matching_score(app):

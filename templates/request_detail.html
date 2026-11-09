@@ -34,8 +34,14 @@
                             <span class="badge badge-status badge-status-accepted fs-6">Accepted</span>
                         {% elif request_obj.status == 'In Progress' %}
                             <span class="badge badge-status badge-status-inprogress fs-6">In Progress</span>
+                        {% elif request_obj.status == 'awaiting_confirmation' %}
+                            <span class="badge bg-warning text-dark fs-6">Awaiting Help Seeker Confirmation</span>
+                        {% elif request_obj.status == 'disputed' %}
+                            <span class="badge bg-danger fs-6">Disputed – Admin Review</span>
                         {% elif request_obj.status == 'Completed' %}
-                            <span class="badge badge-status badge-status-completed fs-6">Completed</span>
+                            <span class="badge badge-status badge-status-completed fs-6">
+                                {% if request_obj.confirmed_by_id %}Confirmed Completed{% else %}Completed{% endif %}
+                            </span>
                         {% elif request_obj.status == 'Cancelled' %}
                             <span class="badge badge-status badge-status-cancelled fs-6">Cancelled</span>
                         {% endif %}
@@ -67,6 +73,27 @@
                             <span class="text-dark">{{ request_obj.age_in_hours }} hours</span>
                         </div>
                     </div>
+
+                    {% if request_obj.volunteer_completed_at %}
+                    <div class="alert alert-light border mt-4 mb-0">
+                        <strong>Volunteer completion update</strong>
+                        <div class="small text-muted mt-1">{{ request_obj.volunteer_completed_at.strftime('%d %b %Y, %H:%M') }}</div>
+                        {% if request_obj.completion_note %}<p class="mb-0 mt-2">{{ request_obj.completion_note }}</p>{% endif %}
+                        {% if request_obj.dispute_reason %}
+                        <div class="border-top mt-3 pt-2">
+                            <strong class="text-danger">Help Seeker's report</strong>
+                            <p class="mb-1">{{ request_obj.dispute_reason }}</p>
+                            {% if request_obj.disputed_at %}<small class="text-muted">{{ request_obj.disputed_at.strftime('%d %b %Y, %H:%M') }}</small>{% endif %}
+                        </div>
+                        {% endif %}
+                        {% if request_obj.rating %}
+                        <div class="border-top mt-3 pt-2">
+                            <strong>Help Seeker rating: {{ request_obj.rating }}/5</strong>
+                            {% if request_obj.feedback %}<p class="mb-0 mt-1">{{ request_obj.feedback }}</p>{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
 
                 <!-- Action Controls Bar -->
@@ -104,14 +131,47 @@
                                 </button>
                             </form>
                             {% elif request_obj.status == 'In Progress' %}
-                            <form method="POST" action="{{ url_for('volunteers.update_task_status', request_id=request_obj.id) }}" data-confirm="Mark this task as finished?">
+                            <form method="POST" action="{{ url_for('volunteers.update_task_status', request_id=request_obj.id) }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="new_status" value="Completed">
+                                <input type="hidden" name="new_status" value="awaiting_confirmation">
+                                <label class="visually-hidden" for="completion-note-{{ request_obj.id }}">Completion note (optional)</label>
+                                <input id="completion-note-{{ request_obj.id }}" class="form-control" name="completion_note" maxlength="2000" placeholder="Completion note (optional)">
                                 <button type="submit" class="btn btn-success">
                                     <i class="bi bi-check-circle-fill me-1"></i> Mark as Completed
                                 </button>
                             </form>
                             {% endif %}
+                        {% endif %}
+
+                        {% if is_owner and request_obj.status == 'awaiting_confirmation' %}
+                        <div class="w-100 rounded border bg-light p-3">
+                            <h6 class="fw-bold">Did you receive the requested help?</h6>
+                            <div class="d-flex flex-wrap gap-2">
+                                <form method="POST" action="{{ url_for('help_requests.confirm_completion', request_id=request_obj.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-success">Yes, I received the help</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('help_requests.dispute_completion', request_id=request_obj.id) }}" class="d-flex flex-grow-1 gap-2">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input class="form-control" name="reason" maxlength="2000" required placeholder="Why is the task not completed?">
+                                    <button type="submit" class="btn btn-outline-danger text-nowrap">No, the task is not completed</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if is_owner and request_obj.status == 'Completed' and request_obj.confirmed_by_id == current_user.id and not request_obj.rating %}
+                        <form method="POST" action="{{ url_for('help_requests.submit_completion_feedback', request_id=request_obj.id) }}" class="w-100 rounded border bg-light p-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <label class="form-label fw-bold" for="request-rating-{{ request_obj.id }}">Rate your volunteer</label>
+                            <select class="form-select mb-2" id="request-rating-{{ request_obj.id }}" name="rating" required>
+                                <option value="">Choose 1–5 stars</option>
+                                {% for stars in range(1, 6) %}<option value="{{ stars }}">{{ stars }} star{% if stars != 1 %}s{% endif %}</option>{% endfor %}
+                            </select>
+                            <label class="form-label" for="request-feedback-{{ request_obj.id }}">Feedback (optional)</label>
+                            <textarea class="form-control mb-2" id="request-feedback-{{ request_obj.id }}" name="feedback" maxlength="2000" rows="3"></textarea>
+                            <button type="submit" class="btn btn-primary">Submit Rating</button>
+                        </form>
                         {% endif %}
 
                         <!-- Seeker / Admin Action: Cancel request -->
